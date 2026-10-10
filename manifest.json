@@ -8,9 +8,8 @@
   "side_panel": { "default_path": "panel.html" },
   "action": { "default_title": "Open Dockside" },
   "commands": {
-    "focus-launcher": {
-      "suggested_key": { "default": "Alt+Shift+S" },
-      "description": "Open or focus the Dockside side panel"
+    "_execute_action": {
+      "suggested_key": { "default": "Alt+Shift+S" }
     }
   }
 }

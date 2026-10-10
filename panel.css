@@ -99,6 +99,20 @@ h1 { font-size: 15px; margin: 0; font-weight: 600; overflow: hidden; text-overfl
   padding: 2px 6px; border-radius: 6px;
 }
 #close-all:hover { background: var(--hover); }
+#actions {
+  position: sticky; bottom: 0;
+  display: flex; gap: 4px; justify-content: center;
+  padding: 8px 14px; background: var(--bg); border-top: 1px solid var(--border);
+}
+#actions button {
+  border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer;
+  padding: 4px 8px; border-radius: 6px;
+}
+#actions button:hover { background: var(--hover); }
+#keep-open { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--muted) !important; display: grid; place-items: center; }
+#keep-open[aria-pressed="true"] { color: var(--accent) !important; background: var(--hover); }
+/* Unlocked: the shackle swings open. */
+#keep-open[aria-pressed="false"] .shackle { transform: translateX(3px) rotate(18deg); transform-origin: 10.5px 7px; }
 body.home header, body.home main, body.home #empty { max-width: 720px; margin-inline: auto; }
 body.home header, body.home #grid { padding-top: 32px; }
 body.home #grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }

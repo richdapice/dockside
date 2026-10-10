@@ -8,13 +8,18 @@ const back = document.getElementById('back');
 const header = document.querySelector('header');
 const heading = document.getElementById('heading');
 const closeAll = document.getElementById('close-all');
+const actions = document.getElementById('actions');
+const dockAll = document.getElementById('dock-all');
+const clearDock = document.getElementById('clear-dock');
+const keepOpenButton = document.getElementById('keep-open');
 
 // The same page runs in the side panel and as each window's pinned home tab.
-const isHome = new URLSearchParams(location.search).has('home');
-if (isHome) document.body.classList.add('home');
+const isPanel = !new URLSearchParams(location.search).has('home');
+if (!isPanel) document.body.classList.add('home');
 
 let shelf = [];
 let order = [];
+let keepOpen = false;
 let dragging = null;
 let openDomain = null;
 // Where focus should land after the next render, as { key, index }. Renders rebuild every node, so focus is
@@ -66,6 +71,9 @@ async function openItem(item) {
     await chrome.tabs.create({ url: item.url });
   }
   await saveShelf(removeFromShelf(shelf, item.url));
+  // Opening a tab is usually the end of a trip to the panel, so it gets out of the way unless told to stay.
+  // window.close() in a side panel closes the panel.
+  if (isPanel && !keepOpen) window.close();
 }
 
 // Tiles in the grid or rows in the open folder: whatever the arrow keys move between.
@@ -87,7 +95,10 @@ function render() {
   grid.hidden = openDomain !== null;
   folder.hidden = openDomain === null;
   header.hidden = openDomain === null;
+  actions.hidden = openDomain !== null;
+  clearDock.hidden = groups.length === 0;
   heading.textContent = openDomain ?? '';
+  keepOpenButton.setAttribute('aria-pressed', String(keepOpen));
 
   if (openDomain) {
     folder.replaceChildren(...current.items.map(folderRow));
@@ -204,6 +215,34 @@ closeAll.addEventListener('click', () => {
 
 back.addEventListener('click', leaveFolder);
 
+// The home tab is a tab, not the panel, so keeping it open means nothing there.
+keepOpenButton.hidden = !isPanel;
+keepOpenButton.addEventListener('click', () => {
+  chrome.storage.local.set({ keepOpen: !keepOpen }).catch(console.error);
+});
+
+dockAll.addEventListener('click', async () => {
+  const win = await chrome.windows.getCurrent();
+  await chrome.runtime.sendMessage({ type: 'dock-all', windowId: win.id });
+});
+
+// Clearing can close a lot of live tabs with no undo, so the first click only arms it.
+let clearArmed = null;
+function disarmClear() {
+  clearTimeout(clearArmed);
+  clearArmed = null;
+  clearDock.textContent = 'Clear dock';
+}
+clearDock.addEventListener('click', () => {
+  if (!clearArmed) {
+    clearDock.textContent = `Close all ${shelf.length} tabs?`;
+    clearArmed = setTimeout(disarmClear, 3000);
+    return;
+  }
+  disarmClear();
+  removeItems([]).catch(console.error);
+});
+
 document.addEventListener('keydown', (e) => {
   if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
   if (openDomain && ['Escape', 'Backspace', 'ArrowLeft'].includes(e.key)) {
@@ -240,20 +279,12 @@ document.addEventListener('keydown', (e) => {
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local' || !(changes.shelf || changes.order)) return;
+  if (area !== 'local' || !(changes.shelf || changes.order || changes.keepOpen)) return;
   if (changes.shelf) shelf = changes.shelf.newValue ?? [];
   if (changes.order) order = changes.order.newValue ?? [];
+  if (changes.keepOpen) keepOpen = changes.keepOpen.newValue ?? false;
   render();
 });
 
-// Sent by the panel shortcut. Home tabs ignore it, and so do side panels in other windows.
-const ownWindow = await chrome.windows.getCurrent();
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type !== 'focus-launcher' || isHome || msg.windowId !== ownWindow.id) return;
-  window.focus();
-  const items = navItems();
-  if (!items.includes(document.activeElement)) items[0]?.focus();
-});
-
-({ shelf = [], order = [] } = await chrome.storage.local.get(['shelf', 'order']));
+({ shelf = [], order = [], keepOpen = false } = await chrome.storage.local.get(['shelf', 'order', 'keepOpen']));
 render();

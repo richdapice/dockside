@@ -10,19 +10,6 @@ chrome.runtime.onInstalled.addListener(() => {
   ensureHomeEverywhere().catch(console.error);
   relinkStash();
 });
-// Opening a side panel that's already open leaves keyboard focus on the page, so after opening, the panel is asked
-// to take focus itself.
-chrome.commands.onCommand.addListener((command, tab) => {
-  if (command !== 'focus-launcher' || !tab) return;
-  // open() has to run inside the shortcut's user gesture, so nothing may be awaited before it.
-  chrome.sidePanel.open({ windowId: tab.windowId })
-    .then(() => chrome.runtime.sendMessage({ type: 'focus-launcher', windowId: tab.windowId }))
-    .catch((e) => {
-      // A panel that was just opened hasn't loaded its listener yet; it gets focus from being opened anyway.
-      if (!e.message.includes('Receiving end does not exist')) console.error(e);
-    });
-});
-
 chrome.runtime.onStartup.addListener(() => {
   seedLastActive().catch(console.error);
   ensureHomeEverywhere().catch(console.error);
@@ -131,6 +118,14 @@ async function recordActivation({ tabId, windowId }) {
     }, SETTLE_MS);
   }
 }
+
+// "Dock all tabs" in the launcher. shelve() skips the active tab and anything that wouldn't be docked on leaving.
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type !== 'dock-all') return;
+  chrome.tabs.query({ windowId: msg.windowId }).then((tabs) => {
+    for (const t of tabs) shelving = shelving.then(() => shelve(t.id)).catch(console.error);
+  }).catch(console.error);
+});
 
 async function shelve(tabId) {
   // tabs.get rejects when the tab is gone, which here means the user closed it during the settle window.
