@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Tabshelf",
+  "version": "0.1.0",
+  "description": "Tabs you leave become apps; a second tab from the same site turns the app into a folder.",
+  "permissions": ["tabs", "storage", "sidePanel", "favicon", "tabGroups"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "side_panel": { "default_path": "panel.html" },
+  "action": { "default_title": "Open Tabshelf" },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Alt+Shift+S" }
+    }
+  }
+}
