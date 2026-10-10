@@ -1,5 +1,5 @@
 import { shelvable, addToShelf } from './shelf.js';
-import { inStash, stashTab, stashedTab, STASH_TITLE } from './stash.js';
+import { inStash, stashTab, stashedTab, STASH_TITLE, LEGACY_STASH_TITLE } from './stash.js';
 
 // Wait before shelving so a tab the user just closed (or bounced straight back to) is left alone.
 const SETTLE_MS = 500;
@@ -10,6 +10,19 @@ chrome.runtime.onInstalled.addListener(() => {
   ensureHomeEverywhere().catch(console.error);
   relinkStash();
 });
+// Opening a side panel that's already open leaves keyboard focus on the page, so after opening, the panel is asked
+// to take focus itself.
+chrome.commands.onCommand.addListener((command, tab) => {
+  if (command !== 'focus-launcher' || !tab) return;
+  // open() has to run inside the shortcut's user gesture, so nothing may be awaited before it.
+  chrome.sidePanel.open({ windowId: tab.windowId })
+    .then(() => chrome.runtime.sendMessage({ type: 'focus-launcher', windowId: tab.windowId }))
+    .catch((e) => {
+      // A panel that was just opened hasn't loaded its listener yet; it gets focus from being opened anyway.
+      if (!e.message.includes('Receiving end does not exist')) console.error(e);
+    });
+});
+
 chrome.runtime.onStartup.addListener(() => {
   seedLastActive().catch(console.error);
   ensureHomeEverywhere().catch(console.error);
@@ -90,6 +103,9 @@ async function unstashIfShelved(tabId) {
 // could now belong to an unrelated tab) and re-attach items to restored stash tabs by URL.
 function relinkStash() {
   shelving = shelving.then(async () => {
+    for (const g of await chrome.tabGroups.query({ title: LEGACY_STASH_TITLE })) {
+      await chrome.tabGroups.update(g.id, { title: STASH_TITLE });
+    }
     const groups = await chrome.tabGroups.query({ title: STASH_TITLE });
     const unclaimed = (await Promise.all(groups.map((g) => chrome.tabs.query({ groupId: g.id })))).flat();
     const { shelf = [] } = await chrome.storage.local.get('shelf');

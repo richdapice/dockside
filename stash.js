@@ -1,6 +1,8 @@
-// Shelved tabs wait in one collapsed group per window instead of closing, so they come back without reloading.
+// Docked tabs wait in one collapsed group per window instead of closing, so they come back without reloading.
 // The group is recognised by its title, which also lets us find it again after Chrome restores a session.
-export const STASH_TITLE = 'Shelved';
+export const STASH_TITLE = 'Docked';
+// What the group was called before the rename from Tabshelf; adopted on update so its tabs aren't stranded.
+export const LEGACY_STASH_TITLE = 'Shelved';
 
 export async function inStash(tab) {
   if (tab.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE) return false;

@@ -10,7 +10,8 @@ const heading = document.getElementById('heading');
 const closeAll = document.getElementById('close-all');
 
 // The same page runs in the side panel and as each window's pinned home tab.
-if (new URLSearchParams(location.search).has('home')) document.body.classList.add('home');
+const isHome = new URLSearchParams(location.search).has('home');
+if (isHome) document.body.classList.add('home');
 
 let shelf = [];
 let order = [];
@@ -136,7 +137,7 @@ function tile(group) {
   const remove = el('button', {
     className: 'remove tile-remove',
     textContent: '×',
-    title: group.kind === 'app' ? 'Remove from shelf' : `Remove all ${group.items.length} tabs`,
+    title: group.kind === 'app' ? 'Remove from dock' : `Remove all ${group.items.length} tabs`,
   });
   remove.addEventListener('click', () => removeItems(removeDomain(shelf, group.domain)).catch(console.error));
   const wrap = el('div', { className: 'tile-wrap', draggable: true }, [node, remove]);
@@ -178,7 +179,7 @@ function clearDropMarkers() {
 
 function folderRow(item) {
   const { pathname, search } = new URL(item.url);
-  const remove = el('button', { className: 'remove', textContent: '×', title: 'Remove from shelf' });
+  const remove = el('button', { className: 'remove', textContent: '×', title: 'Remove from dock' });
   remove.addEventListener('click', (e) => {
     e.stopPropagation();
     removeItems(removeFromShelf(shelf, item.url)).catch(console.error);
@@ -243,6 +244,15 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.shelf) shelf = changes.shelf.newValue ?? [];
   if (changes.order) order = changes.order.newValue ?? [];
   render();
+});
+
+// Sent by the panel shortcut. Home tabs ignore it, and so do side panels in other windows.
+const ownWindow = await chrome.windows.getCurrent();
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type !== 'focus-launcher' || isHome || msg.windowId !== ownWindow.id) return;
+  window.focus();
+  const items = navItems();
+  if (!items.includes(document.activeElement)) items[0]?.focus();
 });
 
 ({ shelf = [], order = [] } = await chrome.storage.local.get(['shelf', 'order']));
