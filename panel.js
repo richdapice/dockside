@@ -108,6 +108,7 @@ function render() {
   masthead.hidden = isPanel || openDomain !== null;
   count.textContent = shelf.length ? `${shelf.length} ${shelf.length === 1 ? 'tab' : 'tabs'} docked` : '';
   cacheTabs.hidden = groups.length === 0;
+  syncClearPrompt();
   heading.textContent = openDomain ?? '';
   keepOpenButton.setAttribute('aria-pressed', String(keepOpen));
 
@@ -254,15 +255,17 @@ const confirmClear = document.getElementById('confirm-clear');
 const confirmCancel = document.getElementById('confirm-cancel');
 function askClear(asking) {
   confirmClear.hidden = !asking;
+  syncClearPrompt();
+  (asking ? confirmCancel : clearDock).focus();
+}
+// Keeps the prompt's count current if the dock changes while it's open, and drops it once there's nothing to clear.
+function syncClearPrompt() {
+  if (!shelf.length) confirmClear.hidden = true;
+  const asking = !confirmClear.hidden;
   cacheTabs.classList.toggle('asking', asking);
   clearDock.classList.toggle('asking', asking);
-  if (asking) {
-    document.getElementById('confirm-text').textContent =
-      `Remove all ${shelf.length} ${shelf.length === 1 ? 'tab' : 'tabs'} from the dock and close them?`;
-    confirmCancel.focus();
-  } else {
-    clearDock.focus();
-  }
+  document.getElementById('confirm-text').textContent =
+    `Remove all ${shelf.length} ${shelf.length === 1 ? 'tab' : 'tabs'} from the dock and close them?`;
 }
 clearDock.addEventListener('click', () => askClear(true));
 confirmCancel.addEventListener('click', () => askClear(false));
@@ -273,8 +276,7 @@ confirmClear.addEventListener('keydown', (e) => {
 });
 document.getElementById('confirm-ok').addEventListener('click', () => {
   confirmClear.hidden = true;
-  cacheTabs.classList.remove('asking');
-  clearDock.classList.remove('asking');
+  syncClearPrompt();
   removeItems([]).catch(console.error);
 });
 
