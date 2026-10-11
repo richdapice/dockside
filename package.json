@@ -3,5 +3,11 @@
   "private": true,
   "license": "MIT",
   "type": "module",
-  "scripts": { "test": "node --test" }
+  "scripts": {
+    "test": "node --test",
+    "e2e": "node --test --test-concurrency=1 e2e/dockside.e2e.js"
+  },
+  "devDependencies": {
+    "playwright": "1.61.1"
+  }
 }
