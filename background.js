@@ -101,10 +101,22 @@ chrome.tabs.onRemoved.addListener((tabId, { isWindowClosing }) => {
   if (!isWindowClosing) shelving = shelving.then(() => forget(tabId)).catch(console.error);
 });
 
-// The chip's count follows tabs joining or leaving the group, closing, or moving to another window.
+// The chip's count follows tabs joining or leaving the group, closing, or moving to another window. A docked tab
+// that leaves the group (dragged out, or into a group of the user's) is back in their hands, so it leaves the dock.
 chrome.tabs.onUpdated.addListener((tabId, { groupId }, tab) => {
-  if (groupId !== undefined) retitleSoon(tab.windowId);
+  if (groupId === undefined) return;
+  retitleSoon(tab.windowId);
+  shelving = shelving.then(() => leftStash(tabId)).catch(console.error);
 });
+
+async function leftStash(tabId) {
+  const tab = await chrome.tabs.get(tabId).catch(ifGone);
+  if (!tab || (await inStash(tab))) return;
+  const { shelf = [] } = await chrome.storage.local.get('shelf');
+  // Matching the URL too guards against a stale id from before a restart that now belongs to another tab.
+  const next = shelf.filter((i) => !(i.tabId === tabId && i.url === tab.url));
+  if (next.length !== shelf.length) await chrome.storage.local.set({ shelf: next });
+}
 chrome.tabs.onRemoved.addListener((tabId, { windowId, isWindowClosing }) => {
   if (!isWindowClosing) retitleSoon(windowId);
 });
@@ -117,8 +129,11 @@ function retitleSoon(windowId) {
 // Docked pages can still navigate (redirects, single-page apps). Each item follows its tab's URL, so the dock
 // reopens what the tab really shows, and after an extension reload or browser restart the group and its tabs can
 // still be matched to the dock by URL instead of being left behind for a second group.
-chrome.tabs.onUpdated.addListener((tabId, { url }) => {
-  if (url) shelving = shelving.then(() => follow(tabId, url)).catch(console.error);
+chrome.tabs.onUpdated.addListener((tabId, { url }, tab) => {
+  // Docked tabs are always in a group, so ungrouped tabs (nearly every navigation) can skip the storage read.
+  if (url && tab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE) {
+    shelving = shelving.then(() => follow(tabId, url)).catch(console.error);
+  }
 });
 
 async function follow(tabId, url) {
@@ -268,7 +283,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // before the tabs close so forget() doesn't drop them.
 async function cacheAll() {
   const ids = await stashGroupIds();
-  const groups = (await chrome.tabGroups.query({})).filter((g) => ids.includes(g.id) || isStashTitle(g.title));
+  // Untracked groups count only if they look like ours (stash title, grey), so a user's own "Docked" group in
+  // another colour is left alone.
+  const groups = (await chrome.tabGroups.query({}))
+    .filter((g) => ids.includes(g.id) || (isStashTitle(g.title) && g.color === 'grey'));
   const tabs = (await Promise.all(groups.map((g) => chrome.tabs.query({ groupId: g.id })))).flat()
     // Incognito pages are never written to disk.
     .filter((t) => !t.incognito);
@@ -283,7 +301,8 @@ async function cacheAll() {
     strays.push({ url: t.url, title: t.title || t.url, domain: domainOf(t.url), shelvedAt: now, tabId: null });
   }
   await chrome.storage.local.set({ shelf: [...shelf.map((i) => ({ ...i, tabId: null })), ...strays] });
-  await chrome.tabs.remove(tabs.map((t) => t.id));
+  // One at a time, so a tab the user closed meanwhile doesn't stop the rest from closing.
+  await Promise.all(tabs.map((t) => chrome.tabs.remove(t.id).catch(ifGone)));
 }
 
 async function removeUrls(urls, closeTabs) {
