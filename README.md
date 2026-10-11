@@ -5,7 +5,7 @@
 <p align="center"><strong>Leave a tab. It docks.</strong></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Chrome-Manifest_V3-4c8dff?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome Manifest V3">
+  <img src="https://img.shields.io/badge/Chrome-Manifest_V3-4c8dff?style=flat-square" alt="Chrome Manifest V3">
   <img src="https://img.shields.io/badge/version-0.1.0-0a55d6?style=flat-square" alt="version 0.1.0">
   <img src="https://img.shields.io/badge/dependencies-none-2ea44f?style=flat-square" alt="no dependencies">
   <img src="https://img.shields.io/badge/host_permissions-none-2ea44f?style=flat-square" alt="no host permissions">
