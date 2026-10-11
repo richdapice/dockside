@@ -74,11 +74,17 @@ Permissions: `tabs` and `tabGroups` to move tabs in and out of the group, `stora
 
 ## Development
 
-No build step and no dependencies. Edit the files, then click reload on the extension in `chrome://extensions`.
+No build step and no runtime dependencies. Edit the files, then click reload on the extension in `chrome://extensions`.
 
 ```sh
-npm test    # unit tests for the dock logic (Node 22+)
+npm test                                     # unit tests for the dock logic (Node 22+)
+npm install && npx playwright install chromium
+npm run e2e                                  # end-to-end tests in Playwright's Chromium, about 40 seconds
+HEADED=1 npm run e2e                         # the same, with the browser visible
 ```
+
+The end-to-end tests load the extension and drive real tabs and groups, with the launcher open as a tab, since
+automation can't open the side panel. The two keyboard shortcuts need real key presses, so check those by hand.
 
 ## License
 
