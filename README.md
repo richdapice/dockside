@@ -1,6 +1,24 @@
-# Dockside
+<p align="center"><img src="icons/icon.svg" alt="" width="88"></p>
 
-**Leave a tab. It docks.**
+<h1 align="center">Dockside</h1>
+
+<p align="center"><strong>Leave a tab. It docks.</strong></p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Chrome-Manifest_V3-4c8dff?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome Manifest V3">
+  <img src="https://img.shields.io/badge/version-0.1.0-0a55d6?style=flat-square" alt="version 0.1.0">
+  <img src="https://img.shields.io/badge/dependencies-none-2ea44f?style=flat-square" alt="no dependencies">
+  <img src="https://img.shields.io/badge/host_permissions-none-2ea44f?style=flat-square" alt="no host permissions">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-555?style=flat-square" alt="MIT license"></a>
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#what-you-get">Features</a> ·
+  <a href="#keys">Keys</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#development">Development</a>
+</p>
 
 <p align="center"><img src="docs/hero.svg" alt="tabs leave the tab strip and fly into the side panel as apps; a second GitHub tab turns its app into a folder" width="960"></p>
 
