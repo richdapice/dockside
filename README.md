@@ -18,14 +18,14 @@ git clone https://github.com/richdapice/dockside.git
 
 1. Open `chrome://extensions` and turn on **Developer mode**.
 2. Click **Load unpacked** and pick the `dockside` folder.
-3. Press **Option+Shift+S** (Alt+Shift+S on Windows and Linux) or click the toolbar icon to open the panel. Press it again to
-   close it.
+3. Press **Option+Shift+S** (Alt+Shift+S on Windows and Linux) or click the toolbar icon to open the panel. Press the
+   shortcut again to close it.
 
 ## What you get
 
 **A tab strip that only holds what you're using.** Switch tabs and the one you left docks after half a second. Close a tab yourself and it's gone, not docked.
 
-**Apps and folders.** One tab from a site is an app. Two or more become a folder with a count; open it to see every tab, how long ago you left it, and a × to drop it.
+**Apps and folders.** One tab from a site is an app. Two or more become a folder with a count; open it to see every tab, how long ago you left it, and a × to drop it. **Close all** in a folder, or the × on a tile, drops the whole site and closes its docked tabs.
 
 **Tabs that don't reload.** Docked tabs live in a collapsed group at the end of the strip, its chip showing ⚓ and how many are inside. Click an app or a folder row and the live tab comes out. Expand the group and click a tab there, and that works too.
 
@@ -44,6 +44,7 @@ git clone https://github.com/richdapice/dockside.git
 | Anywhere in Chrome | Option+Shift+S | Open or close the panel (change it at `chrome://extensions/shortcuts`) |
 | Grid | ← → ↑ ↓ | Move between tiles |
 | Grid | Enter | Open an app, or open a folder |
+| Grid | ↓ from the bottom row | Move to the buttons below the dock; ← → between them, ↑ back to the tiles |
 | Folder | ↑ ↓ | Move between tabs |
 | Folder | Enter | Bring that tab back |
 | Folder | Esc, Backspace, ← | Back to the grid |
@@ -51,7 +52,7 @@ git clone https://github.com/richdapice/dockside.git
 
 ## What never docks
 
-- Pinned tabs and tabs playing audio.
+- Pinned tabs, tabs playing audio, and incognito tabs.
 - Tabs in a group you made. Your groups stay yours.
 - Pages that aren't web pages: `chrome://` pages, the New Tab page, extension pages.
 
@@ -59,6 +60,7 @@ git clone https://github.com/richdapice/dockside.git
 
 - **The dock** is a list in `chrome.storage.local`: URL, title, site, when you left it, and the live tab's id.
 - **The ⚓ group** is tracked by id, so a group of your own that happens to have a similar title is left alone. After a browser restart, ids change: Dockside takes back restored ⚓ groups that hold docked pages and matches their tabs to dock items by URL. If a tab is gone, its app opens the URL fresh instead.
+- **Pages that move:** a docked page can still navigate (redirects, single-page apps). Its dock item follows the tab's address, so it reopens what the tab shows.
 - **Duplicates:** docking a page that's already in the dock keeps only the newer tab.
 
 Permissions: `tabs` and `tabGroups` to move tabs in and out of the group, `storage` for the dock, `sidePanel` for the launcher, `favicon` for site icons. No host permissions; Dockside never reads page content.

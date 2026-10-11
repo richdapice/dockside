@@ -83,6 +83,11 @@ function navItems() {
   return [...(openDomain ? folder.querySelectorAll('.row') : grid.querySelectorAll('.tile'))];
 }
 
+// The visible footer buttons, left to right (they change with the dock and the Clear dock confirmation).
+function footerButtons() {
+  return [...actions.querySelectorAll('button')].filter((b) => b.offsetParent !== null);
+}
+
 function render() {
   const focused = document.activeElement?.dataset.key ? document.activeElement : null;
   const prior = restoreFocus ?? (focused && { key: focused.dataset.key, index: navItems().indexOf(focused) });
@@ -267,10 +272,31 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
+  // In the footer, ← → move between its buttons and ↑ goes back to the tiles.
+  const buttons = footerButtons();
+  const b = buttons.indexOf(document.activeElement);
+  if (b !== -1) {
+    const next = { ArrowLeft: b - 1, ArrowRight: b + 1 }[e.key];
+    if (next !== undefined) {
+      e.preventDefault();
+      buttons[Math.max(0, Math.min(buttons.length - 1, next))].focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      navItems().at(-1)?.focus();
+    }
+    return;
+  }
+
   const items = navItems();
   const at = items.indexOf(document.activeElement);
   const cols = openDomain ? 1 : getComputedStyle(grid).gridTemplateColumns.split(' ').length;
   const step = { ArrowDown: cols, ArrowUp: -cols, ...(openDomain ? {} : { ArrowRight: 1, ArrowLeft: -1 }) }[e.key];
+  // ↓ from the last row of tiles drops into the footer.
+  if (!openDomain && e.key === 'ArrowDown' && at !== -1 && Math.floor(at / cols) === Math.floor((items.length - 1) / cols)) {
+    e.preventDefault();
+    buttons[0]?.focus();
+    return;
+  }
   if (step !== undefined) {
     e.preventDefault();
     // Nothing selected yet: the first arrow press selects the first item rather than moving.

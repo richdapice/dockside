@@ -71,7 +71,7 @@ h1 { font-size: 15px; margin: 0; font-weight: 600; overflow: hidden; text-overfl
   padding: 8px; border-radius: 8px; cursor: pointer;
 }
 .row:hover { background: var(--hover); }
-.tile:focus-visible, .row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tile:focus-visible, .row:focus-visible, #actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .row img { width: 16px; height: 16px; flex: none; }
 .row .text { flex: 1; min-width: 0; }
 .row .title, .row .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -128,10 +128,11 @@ body.home {
 #masthead img { display: block; margin: 0 auto 12px; border-radius: 10px; box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 35%, transparent); }
 #masthead h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
 #count { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
-body.home header, body.home main, body.home #empty { width: 100%; max-width: 760px; margin-inline: auto; }
+body.home header, body.home main, body.home #empty { width: 100%; max-width: 800px; margin-inline: auto; }
 body.home header { padding-top: 40px; }
 body.home #grid {
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  /* auto-fit collapses unused columns, so a short dock sits centred instead of hugging the left. */
+  grid-template-columns: repeat(auto-fit, 112px); justify-content: center;
   gap: 20px 12px; padding: 28px 16px;
 }
 body.home .icon { width: 68px; height: 68px; border-radius: 18px; box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
