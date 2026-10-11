@@ -1,4 +1,4 @@
-import { groupByDomain, removeFromShelf, removeDomain, applyOrder, moveDomain } from './shelf.js';
+import { groupByDomain, removeFromShelf, removeDomain, arrange, pinAt, unpin, moveDomain } from './shelf.js';
 import { stashedTab } from './stash.js';
 
 const grid = document.getElementById('grid');
@@ -20,7 +20,7 @@ const isPanel = !new URLSearchParams(location.search).has('home');
 if (!isPanel) document.body.classList.add('home');
 
 let shelf = [];
-let order = [];
+let pins = {};
 let keepOpen = false;
 let dragging = null;
 let openDomain = null;
@@ -83,9 +83,10 @@ function navItems() {
   return [...(openDomain ? folder.querySelectorAll('.row') : grid.querySelectorAll('.tile'))];
 }
 
-// The visible footer buttons, left to right (they change with the dock and the Clear dock confirmation).
-function footerButtons() {
-  return [...actions.querySelectorAll('button')].filter((b) => b.offsetParent !== null);
+// A bar's visible buttons, left to right: the folder header's Back and Close all, or the footer's, which change
+// with the dock and the Clear dock confirmation.
+function barButtons(bar) {
+  return [...bar.querySelectorAll('button')].filter((b) => b.offsetParent !== null);
 }
 
 function render() {
@@ -93,7 +94,7 @@ function render() {
   const prior = restoreFocus ?? (focused && { key: focused.dataset.key, index: navItems().indexOf(focused) });
   restoreFocus = null;
 
-  const groups = applyOrder(groupByDomain(shelf), order);
+  const groups = arrange(groupByDomain(shelf), pins);
   const current = groups.find((g) => g.domain === openDomain);
   // A folder that dropped back to one item turns back into an app, so leave the folder view.
   if (!current || current.kind === 'app') openDomain = null;
@@ -106,7 +107,7 @@ function render() {
   clearDock.hidden = groups.length === 0;
   masthead.hidden = isPanel || openDomain !== null;
   count.textContent = shelf.length ? `${shelf.length} ${shelf.length === 1 ? 'tab' : 'tabs'} docked` : '';
-  cacheTabs.hidden = !shelf.some((i) => i.tabId != null);
+  cacheTabs.hidden = groups.length === 0;
   heading.textContent = openDomain ?? '';
   keepOpenButton.setAttribute('aria-pressed', String(keepOpen));
 
@@ -163,6 +164,12 @@ function tile(group) {
   remove.addEventListener('click', () => removeItems(removeDomain(shelf, group.domain)).catch(console.error));
   const wrap = el('div', { className: 'tile-wrap', draggable: true }, [node, remove]);
   wrap.dataset.domain = group.domain;
+  if (group.domain in pins) {
+    const pin = el('button', { className: 'tile-pin', title: 'Pinned here. Click to unpin.', ariaLabel: `Unpin ${group.domain}` });
+    pin.innerHTML = PIN_SVG;
+    pin.addEventListener('click', () => savePins(unpin(pins, group.domain)));
+    wrap.append(pin);
+  }
   wrap.addEventListener('dragstart', (e) => {
     dragging = group.domain;
     e.dataTransfer.effectAllowed = 'move';
@@ -183,10 +190,17 @@ function tile(group) {
     e.preventDefault();
     if (!dragging || dragging === group.domain) return;
     const shown = [...grid.querySelectorAll('.tile-wrap')].map((w) => w.dataset.domain);
-    const next = moveDomain(shown, dragging, group.domain, dropsAfter(e, wrap));
-    chrome.storage.local.set({ order: next }).catch(console.error);
+    const index = moveDomain(shown, dragging, group.domain, dropsAfter(e, wrap)).indexOf(dragging);
+    savePins(pinAt(pins, dragging, index));
   });
   return wrap;
+}
+
+const PIN_SVG = '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" '
+  + 'd="M10.2 1.3l4.5 4.5-1.4.6-2.6 2.6.4 3.4-1.3 1.3-2.9-2.9-3.6 3.6-.9-.9 3.6-3.6-2.9-2.9 1.3-1.3 3.4.4 2.6-2.6z"/></svg>';
+
+function savePins(next) {
+  chrome.storage.local.set({ pins: next }).catch(console.error);
 }
 
 function dropsAfter(e, wrap) {
@@ -266,24 +280,31 @@ document.getElementById('confirm-ok').addEventListener('click', () => {
 
 document.addEventListener('keydown', (e) => {
   if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-  if (openDomain && ['Escape', 'Backspace', 'ArrowLeft'].includes(e.key)) {
-    e.preventDefault();
-    leaveFolder();
-    return;
-  }
 
-  // In the footer, ← → move between its buttons and ↑ goes back to the tiles.
-  const buttons = footerButtons();
-  const b = buttons.indexOf(document.activeElement);
-  if (b !== -1) {
+  // In the folder header or the footer, ← → move between its buttons, and ↓ (header) or ↑ (footer) goes back to
+  // the list. Esc in the header still leaves the folder, below.
+  const bar = [header, actions].find((el) => el.contains(document.activeElement));
+  if (bar) {
+    const buttons = barButtons(bar);
+    const b = buttons.indexOf(document.activeElement);
     const next = { ArrowLeft: b - 1, ArrowRight: b + 1 }[e.key];
     if (next !== undefined) {
       e.preventDefault();
       buttons[Math.max(0, Math.min(buttons.length - 1, next))].focus();
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      navItems().at(-1)?.focus();
+      return;
     }
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (bar === header && e.key === 'ArrowDown') navItems()[0]?.focus();
+      if (bar === actions && e.key === 'ArrowUp') navItems().at(-1)?.focus();
+      return;
+    }
+    if (bar === actions) return;
+  }
+
+  if (openDomain && ['Escape', 'ArrowLeft'].includes(e.key)) {
+    e.preventDefault();
+    leaveFolder();
     return;
   }
 
@@ -294,7 +315,13 @@ document.addEventListener('keydown', (e) => {
   // ↓ from the last row of tiles drops into the footer.
   if (!openDomain && e.key === 'ArrowDown' && at !== -1 && Math.floor(at / cols) === Math.floor((items.length - 1) / cols)) {
     e.preventDefault();
-    buttons[0]?.focus();
+    barButtons(actions)[0]?.focus();
+    return;
+  }
+  // ↑ from the first row of a folder goes up to Back and Close all.
+  if (openDomain && e.key === 'ArrowUp' && at === 0) {
+    e.preventDefault();
+    barButtons(header)[0]?.focus();
     return;
   }
   if (step !== undefined) {
@@ -307,7 +334,15 @@ document.addEventListener('keydown', (e) => {
   if (at === -1) return;
 
   const key = items[at].dataset.key;
-  if (e.key === 'Delete') {
+  // P pins the selected tile where it is, or unpins it.
+  if (!openDomain && e.key === 'p') {
+    e.preventDefault();
+    restoreFocus = { key, index: at };
+    savePins(key in pins ? unpin(pins, key) : pinAt(pins, key, at));
+    return;
+  }
+  // Mac keyboards' delete key sends Backspace; Delete is fn+delete there and the Delete key elsewhere.
+  if (e.key === 'Delete' || e.key === 'Backspace') {
     e.preventDefault();
     restoreFocus = { key: null, index: at };
     const next = openDomain ? removeFromShelf(shelf, key) : removeDomain(shelf, key);
@@ -321,14 +356,14 @@ document.addEventListener('keydown', (e) => {
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local' || !(changes.shelf || changes.order || changes.keepOpen)) return;
+  if (area !== 'local' || !(changes.shelf || changes.pins || changes.keepOpen)) return;
   if (changes.shelf) shelf = changes.shelf.newValue ?? [];
-  if (changes.order) order = changes.order.newValue ?? [];
+  if (changes.pins) pins = changes.pins.newValue ?? {};
   if (changes.keepOpen) keepOpen = changes.keepOpen.newValue ?? false;
   render();
 });
 
-({ shelf = [], order = [], keepOpen = false } = await chrome.storage.local.get(['shelf', 'order', 'keepOpen']));
+({ shelf = [], pins = {}, keepOpen = false } = await chrome.storage.local.get(['shelf', 'pins', 'keepOpen']));
 render();
 
 if (isPanel) {

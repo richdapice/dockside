@@ -12,6 +12,8 @@ chrome.runtime.onInstalled.addListener(() => {
   seedLastActive();
   ensureHomeEverywhere().catch(console.error);
   relinkStash();
+  // Replaced by pins: a drag used to save the order of every tile.
+  chrome.storage.local.remove('order').catch(console.error);
 });
 // Each open side panel keeps a port to us, so the shortcut knows which windows have one open without awaiting
 // anything (sidePanel.open() needs the shortcut's user gesture, which an await can lose).
@@ -30,6 +32,7 @@ chrome.runtime.onConnect.addListener((port) => {
 
 // The shortcut opens the panel, or closes it if it's already open.
 chrome.commands.onCommand.addListener((command, tab) => {
+  if (command === 'last-tab' && tab) activations = activations.then(() => switchBack(tab.windowId)).catch(console.error);
   if (command !== 'toggle-panel' || !tab) return;
   const { windowId } = tab;
   if (panels.has(windowId)) chrome.sidePanel.close({ windowId }).catch(console.error);
@@ -202,12 +205,40 @@ async function relink() {
   if (next.some((item, i) => item.tabId !== shelf[i].tabId)) await chrome.storage.local.set({ shelf: next });
 }
 
+// The last-tab shortcut flips back to the tab you were on before, docked or not; pressing it again flips forward.
+// If that tab is gone (closed, or cached by Cache tabs), the newest dock item comes back instead.
+async function switchBack(windowId) {
+  const { previous = {} } = await chrome.storage.session.get('previous');
+  const tab = previous[windowId] === undefined ? null : await chrome.tabs.get(previous[windowId]).catch(ifGone);
+  if (tab) {
+    // Activating a docked tab brings it out of the group (unstashIfShelved).
+    await chrome.tabs.update(tab.id, { active: true });
+    return;
+  }
+  const done = shelving.then(async () => {
+    const { shelf = [] } = await chrome.storage.local.get('shelf');
+    if (!shelf.length) return;
+    const live = await stashedTab(shelf[0]);
+    if (live) {
+      await chrome.tabs.update(live.id, { active: true });
+      await chrome.windows.update(live.windowId, { focused: true });
+      return;
+    }
+    await chrome.tabs.create({ windowId, url: shelf[0].url });
+    await removeUrls([shelf[0].url], false);
+  });
+  shelving = done.catch(console.error);
+  await done;
+}
+
 async function recordActivation({ tabId, windowId }) {
   // The service worker can be killed between events, so the last active tab per window lives in session storage.
   const { lastActive = {} } = await chrome.storage.session.get('lastActive');
   const prev = lastActive[windowId];
   lastActive[windowId] = tabId;
-  await chrome.storage.session.set({ lastActive });
+  const { previous = {} } = await chrome.storage.session.get('previous');
+  if (prev !== undefined && prev !== tabId) previous[windowId] = prev;
+  await chrome.storage.session.set({ lastActive, previous });
 
   if (prev !== undefined && prev !== tabId) {
     setTimeout(() => {
@@ -231,15 +262,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
-// Closes every docked tab to free memory, keeping the items: with no tab, an item reopens from its URL, and the
-// dock in storage.local survives a restart. The items are unlinked first so forget() doesn't drop them as their
-// tabs close.
+// Like OneTab: every tab in a stash group is saved to the dock (storage.local, so it survives a restart) and
+// closed to free memory; its item then reopens from the URL. Works from the groups rather than the dock's links, so
+// tabs whose link was lost, or a stray group left by an older version, are swept up too. Items are written, unlinked,
+// before the tabs close so forget() doesn't drop them.
 async function cacheAll() {
+  const ids = await stashGroupIds();
+  const groups = (await chrome.tabGroups.query({})).filter((g) => ids.includes(g.id) || isStashTitle(g.title));
+  const tabs = (await Promise.all(groups.map((g) => chrome.tabs.query({ groupId: g.id })))).flat()
+    // Incognito pages are never written to disk.
+    .filter((t) => !t.incognito);
+  if (!tabs.length) return;
   const { shelf = [] } = await chrome.storage.local.get('shelf');
-  const live = shelf.filter((i) => i.tabId != null);
-  if (!live.length) return;
-  await chrome.storage.local.set({ shelf: shelf.map((i) => ({ ...i, tabId: null })) });
-  await closeStashed(live);
+  const known = new Set(shelf.map((i) => i.url));
+  const now = Date.now();
+  const strays = [];
+  for (const t of tabs) {
+    if (!/^https?:\/\//.test(t.url) || known.has(t.url)) continue;
+    known.add(t.url);
+    strays.push({ url: t.url, title: t.title || t.url, domain: domainOf(t.url), shelvedAt: now, tabId: null });
+  }
+  await chrome.storage.local.set({ shelf: [...shelf.map((i) => ({ ...i, tabId: null })), ...strays] });
+  await chrome.tabs.remove(tabs.map((t) => t.id));
 }
 
 async function removeUrls(urls, closeTabs) {

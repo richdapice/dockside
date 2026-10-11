@@ -34,15 +34,39 @@ export function groupByDomain(shelf) {
   return [...groups].map(([domain, items]) => ({ domain, items, kind: items.length === 1 ? 'app' : 'folder' }));
 }
 
-// Domains the user has arranged keep their saved position; any other domain goes in front, newest first,
-// so a tab you just left is easy to find.
-export function applyOrder(groups, order) {
-  const rank = new Map(order.map((d, i) => [d, i]));
-  const placed = groups.filter((g) => rank.has(g.domain)).sort((a, b) => rank.get(a.domain) - rank.get(b.domain));
-  return [...groups.filter((g) => !rank.has(g.domain)), ...placed];
+// Pinned domains ({ domain: index }) sit at their index; the rest fill the gaps in the order given (newest first).
+// A pin past the end lands at the end. Pins for domains not in the dock take no space, and apply again if the
+// domain comes back.
+export function arrange(groups, pins) {
+  const pinned = groups.filter((g) => g.domain in pins).sort((a, b) => pins[a.domain] - pins[b.domain]);
+  const rest = groups.filter((g) => !(g.domain in pins));
+  const out = [];
+  while (pinned.length || rest.length) {
+    const due = pinned.length && (pins[pinned[0].domain] <= out.length || !rest.length);
+    out.push(due ? pinned.shift() : rest.shift());
+  }
+  return out;
 }
 
-// Builds the new saved order from what's on screen, which also drops domains that left the shelf.
+// Pins a domain at an index. A pin already there moves one along, which can push the next one along, and so on.
+export function pinAt(pins, domain, index) {
+  const next = { ...pins };
+  delete next[domain];
+  for (let d = domain, at = index; d; at++) {
+    const clash = Object.keys(next).find((k) => k !== d && next[k] === at);
+    next[d] = at;
+    d = clash;
+  }
+  return next;
+}
+
+export function unpin(pins, domain) {
+  const next = { ...pins };
+  delete next[domain];
+  return next;
+}
+
+// The on-screen order after a drag, used to find the index the dragged domain was dropped at.
 export function moveDomain(domains, dragged, target, after) {
   const rest = domains.filter((d) => d !== dragged);
   const at = rest.indexOf(target) + (after ? 1 : 0);

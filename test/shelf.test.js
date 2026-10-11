@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { domainOf, shelvable, addToShelf, removeFromShelf, removeDomain, groupByDomain, applyOrder, moveDomain } from '../shelf.js';
+import { domainOf, shelvable, addToShelf, removeFromShelf, removeDomain, groupByDomain, arrange, pinAt, unpin, moveDomain } from '../shelf.js';
 
 const tab = (url, extra = {}) => ({ url, title: url, ...extra });
 
@@ -57,10 +57,24 @@ test('removeDomain drops every item from that domain only', () => {
   assert.deepEqual(removeDomain(shelf, 'a.com').map((i) => i.url), ['https://b.com/1']);
 });
 
-test('applyOrder keeps arranged domains in place and puts new ones in front', () => {
-  const groups = ['new.com', 'b.com', 'a.com', 'c.com'].map((domain) => ({ domain }));
-  assert.deepEqual(applyOrder(groups, ['a.com', 'gone.com', 'b.com', 'c.com']).map((g) => g.domain),
-    ['new.com', 'a.com', 'b.com', 'c.com']);
+const groupsOf = (...domains) => domains.map((domain) => ({ domain }));
+const names = (groups) => groups.map((g) => g.domain).join(' ');
+
+test('arrange puts pinned domains at their index and fills the rest newest first', () => {
+  assert.equal(names(arrange(groupsOf('n1', 'n2', 'n3', 'p'), { p: 1 })), 'n1 p n2 n3');
+  assert.equal(names(arrange(groupsOf('n1', 'p0', 'n2', 'p2'), { p0: 0, p2: 2 })), 'p0 n1 p2 n2');
+});
+
+test('arrange puts a pin past the end at the end, and ignores pins for absent domains', () => {
+  assert.equal(names(arrange(groupsOf('n1', 'p'), { p: 5 })), 'n1 p');
+  assert.equal(names(arrange(groupsOf('n1', 'n2'), { gone: 0 })), 'n1 n2');
+  assert.equal(names(arrange(groupsOf('p1', 'p2'), { p2: 3, p1: 7 })), 'p2 p1');
+});
+
+test('pinAt moves clashing pins along', () => {
+  assert.deepEqual(pinAt({ a: 0, b: 1, c: 3 }, 'd', 0), { d: 0, a: 1, b: 2, c: 3 });
+  assert.deepEqual(pinAt({ a: 0, b: 1 }, 'a', 1), { a: 1, b: 2 });
+  assert.deepEqual(unpin({ a: 0, b: 1 }, 'a'), { b: 1 });
 });
 
 test('moveDomain inserts before or after the target', () => {
