@@ -18,7 +18,8 @@ git clone https://github.com/richdapice/dockside.git
 
 1. Open `chrome://extensions` and turn on **Developer mode**.
 2. Click **Load unpacked** and pick the `dockside` folder.
-3. Press **Option+Shift+S** (Alt+Shift+S on Windows and Linux) or click the toolbar icon to open the panel.
+3. Press **Option+Shift+S** (Alt+Shift+S on Windows and Linux) or click the toolbar icon to open the panel. Press it again to
+   close it.
 
 ## What you get
 
@@ -26,11 +27,11 @@ git clone https://github.com/richdapice/dockside.git
 
 **Apps and folders.** One tab from a site is an app. Two or more become a folder with a count; open it to see every tab, how long ago you left it, and a × to drop it.
 
-**Tabs that don't reload.** Docked tabs live in a collapsed "Docked" group at the end of the strip. Click an app or a folder row and the live tab comes out. Expand the group and click a tab there, and that works too.
+**Tabs that don't reload.** Docked tabs live in a collapsed group at the end of the strip, its chip showing ⚓ and how many are inside. Click an app or a folder row and the live tab comes out. Expand the group and click a tab there, and that works too.
 
 **Your arrangement.** Drag tiles to reorder them. New sites land at the front, so the tab you just left is easy to find.
 
-**Bulk moves.** **Dock all tabs** sweeps every tab in the window into the dock except the one you're on. **Clear dock** closes every docked tab; click it twice to confirm.
+**Bulk moves.** **Cache tabs** closes every docked tab to free memory; the dock keeps them, and opening one loads it fresh from its address. **Clear dock** empties the dock and closes its tabs, after asking you to confirm.
 
 **A panel that gets out of the way.** Opening a tab from the side panel closes the panel. Click the lock in its corner to keep it open instead.
 
@@ -57,7 +58,7 @@ git clone https://github.com/richdapice/dockside.git
 ## How it works
 
 - **The dock** is a list in `chrome.storage.local`: URL, title, site, when you left it, and the live tab's id.
-- **The "Docked" group** is found by its title in each window. After a browser restart, tab ids change, so Dockside matches restored docked tabs back to dock items by URL. If a tab is gone, its app opens the URL fresh instead.
+- **The ⚓ group** is tracked by id, so a group of your own that happens to have a similar title is left alone. After a browser restart, ids change: Dockside takes back restored ⚓ groups that hold docked pages and matches their tabs to dock items by URL. If a tab is gone, its app opens the URL fresh instead.
 - **Duplicates:** docking a page that's already in the dock keeps only the newer tab.
 
 Permissions: `tabs` and `tabGroups` to move tabs in and out of the group, `storage` for the dock, `sidePanel` for the launcher, `favicon` for site icons. No host permissions; Dockside never reads page content.

@@ -109,10 +109,39 @@ h1 { font-size: 15px; margin: 0; font-weight: 600; overflow: hidden; text-overfl
   padding: 4px 8px; border-radius: 6px;
 }
 #actions button:hover { background: var(--hover); }
+#actions .asking { display: none; }
+#confirm-clear { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 8px; }
+#confirm-text { color: var(--text); text-align: center; }
+#actions #confirm-ok { background: #e5484d; color: #fff; }
+#actions #confirm-ok:hover { background: #d13438; }
 #keep-open { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--muted) !important; display: grid; place-items: center; }
 #keep-open[aria-pressed="true"] { color: var(--accent) !important; background: var(--hover); }
 /* Unlocked: the shackle swings open. */
 #keep-open[aria-pressed="false"] .shackle { transform: translateX(3px) rotate(18deg); transform-origin: 10.5px 7px; }
-body.home header, body.home main, body.home #empty { max-width: 720px; margin-inline: auto; }
-body.home header, body.home #grid { padding-top: 32px; }
-body.home #grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+/* The home tab: a whole page, so the dock sits centred under a masthead instead of hugging the top. */
+body.home {
+  min-height: 100vh;
+  display: flex; flex-direction: column;
+  background: radial-gradient(ellipse 80% 50% at 50% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent), var(--bg);
+}
+#masthead { text-align: center; padding: 40px 16px 8px; }
+#masthead img { display: block; margin: 0 auto 12px; border-radius: 10px; box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 35%, transparent); }
+#masthead h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+#count { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+body.home header, body.home main, body.home #empty { width: 100%; max-width: 760px; margin-inline: auto; }
+body.home header { padding-top: 40px; }
+body.home #grid {
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 20px 12px; padding: 28px 16px;
+}
+body.home .icon { width: 68px; height: 68px; border-radius: 18px; box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+body.home .icon img { width: 36px; height: 36px; }
+body.home .folder .icon img { width: 28px; height: 28px; }
+body.home .label { font-size: 12px; }
+body.home .tile { padding: 8px 4px; border-radius: 14px; }
+body.home #folder { padding: 12px 16px; }
+body.home .row { padding: 10px 12px; }
+body.home #empty { padding-top: 8px; font-size: 14px; }
+/* Actions follow the dock rather than pinning a bar to the bottom of a mostly empty page. */
+body.home #actions { position: static; border-top: 0; background: none; gap: 8px; }
+body.home #actions button { border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; }

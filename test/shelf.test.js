@@ -9,8 +9,9 @@ test('domainOf strips www', () => {
   assert.equal(domainOf('https://docs.github.com/a'), 'docs.github.com');
 });
 
-test('shelvable skips pinned, audible, grouped, and non-web tabs', () => {
+test('shelvable skips pinned, audible, grouped, incognito, and non-web tabs', () => {
   assert.equal(shelvable(tab('https://a.com')), true);
+  assert.equal(shelvable(tab('https://a.com', { incognito: true })), false);
   assert.equal(shelvable(tab('https://a.com', { pinned: true })), false);
   assert.equal(shelvable(tab('https://a.com', { audible: true })), false);
   assert.equal(shelvable(tab('https://a.com', { groupId: 7 })), false);

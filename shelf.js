@@ -5,9 +5,9 @@ export function domainOf(url) {
 }
 
 // Pinned, audible, and already-grouped tabs (the user's own groups, or already shelved) are left where they are;
-// non-web pages can't be meaningfully reopened.
+// non-web pages can't be meaningfully reopened. Incognito tabs would be written to disk in storage.local.
 export function shelvable(tab) {
-  return !tab.pinned && !tab.audible && (tab.groupId ?? -1) === -1 && /^https?:\/\//.test(tab.url ?? '');
+  return !tab.incognito && !tab.pinned && !tab.audible && (tab.groupId ?? -1) === -1 && /^https?:\/\//.test(tab.url ?? '');
 }
 
 // Newest first. Shelving a URL that's already there moves it to the front instead of duplicating it.

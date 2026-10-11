@@ -1,5 +1,5 @@
 import { groupByDomain, removeFromShelf, removeDomain, applyOrder, moveDomain } from './shelf.js';
-import { stashedTab, closeStashed } from './stash.js';
+import { stashedTab } from './stash.js';
 
 const grid = document.getElementById('grid');
 const folder = document.getElementById('folder');
@@ -9,7 +9,9 @@ const header = document.querySelector('header');
 const heading = document.getElementById('heading');
 const closeAll = document.getElementById('close-all');
 const actions = document.getElementById('actions');
-const dockAll = document.getElementById('dock-all');
+const cacheTabs = document.getElementById('cache-tabs');
+const masthead = document.getElementById('masthead');
+const count = document.getElementById('count');
 const clearDock = document.getElementById('clear-dock');
 const keepOpenButton = document.getElementById('keep-open');
 
@@ -44,15 +46,15 @@ function ago(ms) {
   return hours < 24 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`;
 }
 
-async function saveShelf(next) {
-  await chrome.storage.local.set({ shelf: next });
+// The background owns all shelf writes (it serializes them with docking), so changes go to it as messages.
+async function removeFromDock(urls, closeTabs) {
+  const res = await chrome.runtime.sendMessage({ type: 'remove', urls, closeTabs });
+  if (res?.error) throw new Error(res.error);
 }
 
 // Takes items off the shelf and closes their stashed tabs, so nothing is left behind in the group.
 async function removeItems(next) {
-  const gone = shelf.filter((i) => !next.includes(i));
-  await saveShelf(next);
-  await closeStashed(gone);
+  await removeFromDock(shelf.filter((i) => !next.includes(i)).map((i) => i.url), true);
 }
 
 async function openItem(item) {
@@ -70,7 +72,7 @@ async function openItem(item) {
   } else {
     await chrome.tabs.create({ url: item.url });
   }
-  await saveShelf(removeFromShelf(shelf, item.url));
+  await removeFromDock([item.url], false);
   // Opening a tab is usually the end of a trip to the panel, so it gets out of the way unless told to stay.
   // window.close() in a side panel closes the panel.
   if (isPanel && !keepOpen) window.close();
@@ -97,6 +99,9 @@ function render() {
   header.hidden = openDomain === null;
   actions.hidden = openDomain !== null;
   clearDock.hidden = groups.length === 0;
+  masthead.hidden = isPanel || openDomain !== null;
+  count.textContent = shelf.length ? `${shelf.length} ${shelf.length === 1 ? 'tab' : 'tabs'} docked` : '';
+  cacheTabs.hidden = !shelf.some((i) => i.tabId != null);
   heading.textContent = openDomain ?? '';
   keepOpenButton.setAttribute('aria-pressed', String(keepOpen));
 
@@ -221,25 +226,36 @@ keepOpenButton.addEventListener('click', () => {
   chrome.storage.local.set({ keepOpen: !keepOpen }).catch(console.error);
 });
 
-dockAll.addEventListener('click', async () => {
-  const win = await chrome.windows.getCurrent();
-  await chrome.runtime.sendMessage({ type: 'dock-all', windowId: win.id });
+cacheTabs.addEventListener('click', () => {
+  chrome.runtime.sendMessage({ type: 'cache' }).catch(console.error);
 });
 
-// Clearing can close a lot of live tabs with no undo, so the first click only arms it.
-let clearArmed = null;
-function disarmClear() {
-  clearTimeout(clearArmed);
-  clearArmed = null;
-  clearDock.textContent = 'Clear dock';
-}
-clearDock.addEventListener('click', () => {
-  if (!clearArmed) {
-    clearDock.textContent = `Close all ${shelf.length} tabs?`;
-    clearArmed = setTimeout(disarmClear, 3000);
-    return;
+// Clearing can close a lot of live tabs with no undo, so it asks first, with Cancel focused.
+const confirmClear = document.getElementById('confirm-clear');
+const confirmCancel = document.getElementById('confirm-cancel');
+function askClear(asking) {
+  confirmClear.hidden = !asking;
+  cacheTabs.classList.toggle('asking', asking);
+  clearDock.classList.toggle('asking', asking);
+  if (asking) {
+    document.getElementById('confirm-text').textContent =
+      `Remove all ${shelf.length} ${shelf.length === 1 ? 'tab' : 'tabs'} from the dock and close them?`;
+    confirmCancel.focus();
+  } else {
+    clearDock.focus();
   }
-  disarmClear();
+}
+clearDock.addEventListener('click', () => askClear(true));
+confirmCancel.addEventListener('click', () => askClear(false));
+confirmClear.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  e.stopPropagation();
+  askClear(false);
+});
+document.getElementById('confirm-ok').addEventListener('click', () => {
+  confirmClear.hidden = true;
+  cacheTabs.classList.remove('asking');
+  clearDock.classList.remove('asking');
   removeItems([]).catch(console.error);
 });
 
@@ -288,3 +304,18 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 ({ shelf = [], order = [], keepOpen = false } = await chrome.storage.local.get(['shelf', 'order', 'keepOpen']));
 render();
+
+if (isPanel) {
+  // A freshly opened panel has keyboard focus; select the first tile so the arrow keys and Enter work at once.
+  navItems()[0]?.focus();
+
+  // Tell the background this window's panel is open, so the shortcut knows to close it.
+  const { id: windowId } = await chrome.windows.getCurrent();
+  const connect = () => {
+    const port = chrome.runtime.connect({ name: 'panel' });
+    // The service worker was stopped or restarted; check in with the new one.
+    port.onDisconnect.addListener(connect);
+    port.postMessage({ windowId });
+  };
+  connect();
+}
