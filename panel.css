@@ -71,7 +71,7 @@ h1 { font-size: 15px; margin: 0; font-weight: 600; overflow: hidden; text-overfl
   padding: 8px; border-radius: 8px; cursor: pointer;
 }
 .row:hover { background: var(--hover); }
-.tile:focus-visible, .row:focus-visible, #actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tile:focus-visible, .row:focus-visible, #actions button:focus-visible, header button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .row img { width: 16px; height: 16px; flex: none; }
 .row .text { flex: 1; min-width: 0; }
 .row .title, .row .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -93,6 +93,14 @@ h1 { font-size: 15px; margin: 0; font-weight: 600; overflow: hidden; text-overfl
   width: 20px; height: 20px; padding: 0; border-radius: 10px; font-size: 14px; line-height: 1;
   background: var(--tile); border: 1px solid var(--border);
 }
+.tile-pin {
+  /* On the icon's bottom-right corner. */
+  position: absolute; top: 42px; left: calc(50% + 14px);
+  width: 20px; height: 20px; padding: 0; border-radius: 10px; border: 2px solid var(--bg);
+  background: var(--accent); color: #fff; cursor: pointer; display: grid; place-items: center;
+}
+.tile-pin:hover { filter: brightness(1.15); }
+body.home .tile-pin { top: 62px; left: calc(50% + 22px); }
 #close-all {
   margin-left: auto; flex: none;
   border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer;

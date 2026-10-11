@@ -12,6 +12,10 @@
     "toggle-panel": {
       "suggested_key": { "default": "Alt+Shift+S" },
       "description": "Open or close the Dockside panel"
+    },
+    "last-tab": {
+      "suggested_key": { "default": "Alt+Shift+L" },
+      "description": "Switch to the tab you used last"
     }
   }
 }
