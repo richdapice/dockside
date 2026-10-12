@@ -145,10 +145,16 @@ body.home .tile-pin { top: 62px; left: calc(50% + 22px); }
 }
 #actions button:hover { background: var(--hover); }
 #actions .asking { display: none; }
-#confirm-clear { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 8px; }
+/* In a narrow panel the centered buttons would run into the corner ones, so they center in the space left of those. */
+@media (max-width: 360px) {
+  body:not(.home) #actions { padding-right: 74px; }
+}
+#confirm { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 8px; }
 #confirm-text { color: var(--text); text-align: center; }
 #actions #confirm-ok { background: #e5484d; color: #fff; }
 #actions #confirm-ok:hover { background: #d13438; }
+#actions #confirm-ok.keeps { background: var(--accent); }
+#actions #confirm-ok.keeps:hover { background: color-mix(in srgb, var(--accent) 85%, black); }
 #keep-open, #show-labels { position: absolute; top: 50%; transform: translateY(-50%); color: var(--muted) !important; display: grid; place-items: center; }
 #keep-open { right: 10px; }
 #show-labels { right: 42px; }

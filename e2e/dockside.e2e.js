@@ -252,7 +252,7 @@ test('docked tabs are relinked after a browser restart', async (t) => {
   assert.equal((await b.tabUrls()).filter((u) => u === '/a').length, 1);
 });
 
-test('Unload tabs closes every docked tab, keeps it in the dock, and the dock survives a restart', async (t) => {
+test('Dock all tabs closes every docked tab, keeps it in the dock, and the dock survives a restart', async (t) => {
   const b = await launch(t);
   for (const p of ['/a', '/b', '/c', '/d']) await b.visit(site + p);
   await eventually(async () => assert.equal((await b.dock()).length, 3));
@@ -275,6 +275,7 @@ test('Unload tabs closes every docked tab, keeps it in the dock, and the dock su
   await eventually(async () => assert.equal((await b.dock()).length, 4));
   assert.ok(await panel.isVisible('#cache-tabs'));
   await panel.click('#cache-tabs');
+  await panel.click('#confirm-ok');
   await eventually(async () => {
     assert.deepEqual((await b.dock()).sort(), ['/a', '/b', '/c', '/d', '/stray']);
     assert.deepEqual((await b.groups()).map((g) => g.title).sort(), ['Docked', 'Work']);
@@ -295,7 +296,7 @@ test('Unload tabs closes every docked tab, keeps it in the dock, and the dock su
   assert.deepEqual((await again.dock()).sort(), ['/b', '/c', '/d', '/stray']);
 });
 
-test('Unload tabs pulls in open tabs too, even with an empty dock, but not ones that never dock', async (t) => {
+test('Dock all tabs pulls in open tabs too, even with an empty dock, but not ones that never dock', async (t) => {
   const b = await launch(t);
   await b.sw.evaluate(async ({ site }) => {
     for (const p of ['/x', '/y']) await chrome.tabs.create({ url: site + p, active: false });
@@ -305,7 +306,20 @@ test('Unload tabs pulls in open tabs too, even with an empty dock, but not ones 
   }, { site });
   const panel = await b.panel();
   await b.seed([`${site}/old`]);
+  // It asks first, in blue rather than Clear's red, and backing out changes nothing.
   await panel.click('#cache-tabs');
+  assert.equal(await panel.textContent('#confirm-text'), "Dock every tab except the one you're on, and close them?");
+  assert.equal(await panel.textContent('#confirm-ok'), 'Dock all');
+  assert.ok(await panel.$eval('#confirm-ok', (b) => b.classList.contains('keeps')));
+  assert.equal(await focused(panel), 'confirm-cancel');
+  await panel.keyboard.press('Escape');
+  assert.ok(!(await panel.isVisible('#confirm')));
+  assert.equal(await focused(panel), 'cache-tabs');
+  await sleep(300);
+  assert.deepEqual(await b.dock(), ['/old']);
+
+  await panel.click('#cache-tabs');
+  await panel.click('#confirm-ok');
   await eventually(async () => assert.deepEqual(await b.dock(), ['/x', '/y', '/old']));
   const open = await b.tabUrls();
   assert.ok(!open.includes('/x') && !open.includes('/y'));
@@ -344,6 +358,7 @@ test('the home tab counts docked tabs and how many are still loaded', async (t) 
   const panel = await b.panel();
   await eventually(async () => assert.equal(await count(), '3 tabs docked · 3 loaded'));
   await panel.click('#cache-tabs');
+  await panel.click('#confirm-ok');
   await eventually(async () => assert.equal(await count(), '3 tabs docked · 0 loaded'));
 
   // A window closing leaves its docked tabs in the dock but closes them, without the dock changing.
@@ -366,17 +381,19 @@ test('Clear dock asks first, and the prompt follows the dock', async (t) => {
     await b.seed(urls);
     const p = await b.panel(query, width);
     await p.click('#clear-dock');
-    assert.ok(await p.isVisible('#confirm-clear'));
+    assert.ok(await p.isVisible('#confirm'));
     assert.equal(await p.textContent('#confirm-text'), 'Remove all 3 tabs from the dock and close them?');
+    assert.equal(await p.textContent('#confirm-ok'), 'Clear');
+    assert.ok(!(await p.$eval('#confirm-ok', (b) => b.classList.contains('keeps'))), 'Clear stays red');
     assert.equal(await focused(p), 'confirm-cancel');
     assert.ok(!(await p.isVisible('#clear-dock')) && !(await p.isVisible('#cache-tabs')));
 
     await p.keyboard.press('Escape');
-    assert.ok(!(await p.isVisible('#confirm-clear')));
+    assert.ok(!(await p.isVisible('#confirm')));
     assert.equal(await focused(p), 'clear-dock');
     await p.click('#clear-dock');
     await p.click('#confirm-cancel');
-    assert.ok(!(await p.isVisible('#confirm-clear')));
+    assert.ok(!(await p.isVisible('#confirm')));
     assert.equal((await b.dock()).length, 3);
 
     // The dock changing elsewhere while asking updates the count, and emptying it drops the prompt.
@@ -385,15 +402,15 @@ test('Clear dock asks first, and the prompt follows the dock', async (t) => {
     await eventually(async () => assert.equal(await p.textContent('#confirm-text'), 'Remove all 2 tabs from the dock and close them?'));
     await b.seed([]);
     await eventually(async () => assert.ok(await p.isVisible('#empty')));
-    assert.ok(!(await p.isVisible('#confirm-clear')) && !(await p.isVisible('#clear-dock')));
-    assert.ok(await p.isVisible('#cache-tabs'), 'Unload tabs can still pull in open tabs');
+    assert.ok(!(await p.isVisible('#confirm')) && !(await p.isVisible('#clear-dock')));
+    assert.ok(await p.isVisible('#cache-tabs'), 'Dock all tabs can still pull in open tabs');
 
     await b.seed(urls);
     await p.click('#clear-dock');
     await p.click('#confirm-ok');
     await eventually(async () => assert.deepEqual(await b.dock(), []));
     assert.ok(await p.isVisible('#empty'));
-    assert.ok(!(await p.isVisible('#confirm-clear')));
+    assert.ok(!(await p.isVisible('#confirm')));
     await p.close();
   }
 });
@@ -524,6 +541,10 @@ test('the corner buttons sit inside the footer, even with an empty dock', async 
       assert.ok(box.y > footer.y && box.y + box.height < footer.y + footer.height, `${id} with ${urls.length} docked`);
     }
   }
+  // Nor do the centered buttons run into them at the side panel's narrowest.
+  await p.setViewportSize({ width: 320, height: 500 });
+  const clear = await p.locator('#clear-dock').boundingBox();
+  assert.ok(clear.x + clear.width < (await p.locator('#show-labels').boundingBox()).x);
 });
 
 test('keyboard: arrows reach the footer buttons and come back', async (t) => {

@@ -162,7 +162,7 @@ function render() {
   masthead.hidden = isPanel || openDomain !== null;
   showCount();
   if (!isPanel) countLoaded().catch(console.error);
-  syncClearPrompt();
+  syncPrompt();
   heading.textContent = openDomain ? siteName(openDomain) : '';
   keepOpenButton.setAttribute('aria-pressed', String(keepOpen));
   document.body.classList.toggle('no-labels', !showLabels);
@@ -328,40 +328,45 @@ showLabelsButton.addEventListener('click', () => {
   chrome.storage.local.set({ showLabels: !showLabels }).catch(console.error);
 });
 
-cacheTabs.addEventListener('click', () => {
-  chrome.runtime.sendMessage({ type: 'cache' }).catch(console.error);
-});
-
-// Clearing can close a lot of live tabs with no undo, so it asks first, with Cancel focused.
-const confirmClear = document.getElementById('confirm-clear');
+// Clear dock and Dock all tabs can close a lot of live tabs at once, so they ask first, with Cancel focused.
+const confirmPrompt = document.getElementById('confirm');
 const confirmCancel = document.getElementById('confirm-cancel');
-function askClear(asking) {
-  confirmClear.hidden = !asking;
-  syncClearPrompt();
-  (asking ? confirmCancel : clearDock).focus();
+const confirmOk = document.getElementById('confirm-ok');
+// What the prompt is asking about: 'clear', 'dock', or null.
+let asking = null;
+function ask(what) {
+  const opener = asking === 'dock' ? cacheTabs : clearDock;
+  asking = what;
+  syncPrompt();
+  (asking ? confirmCancel : opener).focus();
 }
-// Keeps the prompt's count current if the dock changes while it's open, and drops it once there's nothing to clear.
-function syncClearPrompt() {
-  if (!shelf.length) confirmClear.hidden = true;
-  const asking = !confirmClear.hidden;
-  cacheTabs.classList.toggle('asking', asking);
-  clearDock.classList.toggle('asking', asking);
+// Keeps Clear's count current if the dock changes while it's open, and drops it once there's nothing to clear.
+function syncPrompt() {
+  if (asking === 'clear' && !shelf.length) asking = null;
+  confirmPrompt.hidden = !asking;
   // The prompt runs right up to the corner buttons.
-  showLabelsButton.classList.toggle('asking', asking);
-  document.getElementById('confirm-text').textContent =
-    `Remove all ${shelf.length} ${shelf.length === 1 ? 'tab' : 'tabs'} from the dock and close them?`;
+  for (const button of [cacheTabs, clearDock, showLabelsButton]) button.classList.toggle('asking', asking !== null);
+  document.getElementById('confirm-text').textContent = asking === 'dock'
+    ? "Dock every tab except the one you're on, and close them?"
+    : `Remove all ${shelf.length} ${shelf.length === 1 ? 'tab' : 'tabs'} from the dock and close them?`;
+  // Docking keeps every tab, so it isn't shown in red like Clear.
+  confirmOk.textContent = asking === 'dock' ? 'Dock all' : 'Clear';
+  confirmOk.classList.toggle('keeps', asking === 'dock');
 }
-clearDock.addEventListener('click', () => askClear(true));
-confirmCancel.addEventListener('click', () => askClear(false));
-confirmClear.addEventListener('keydown', (e) => {
+cacheTabs.addEventListener('click', () => ask('dock'));
+clearDock.addEventListener('click', () => ask('clear'));
+confirmCancel.addEventListener('click', () => ask(null));
+confirmPrompt.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   e.stopPropagation();
-  askClear(false);
+  ask(null);
 });
-document.getElementById('confirm-ok').addEventListener('click', () => {
-  confirmClear.hidden = true;
-  syncClearPrompt();
-  removeItems([]).catch(console.error);
+confirmOk.addEventListener('click', () => {
+  const what = asking;
+  asking = null;
+  syncPrompt();
+  if (what === 'dock') chrome.runtime.sendMessage({ type: 'cache' }).catch(console.error);
+  else removeItems([]).catch(console.error);
 });
 
 document.addEventListener('keydown', (e) => {
