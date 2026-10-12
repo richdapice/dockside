@@ -305,7 +305,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
-// Like OneTab: every tab in a stash group, and every open tab that could dock (each window keeps the tab you're
+// Every tab in a stash group, and every open tab that could dock (each window keeps the tab you're
 // on), is saved to the dock (storage.local, so it survives a restart) and closed to free memory; its item then
 // reopens from the URL. Works from the groups rather than the dock's links, so tabs whose link was lost, or a stray
 // group left by an older version, are swept up too. Items are written, unlinked, before the tabs close so forget()
