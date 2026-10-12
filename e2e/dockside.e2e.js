@@ -26,6 +26,7 @@ async function eventually(check, ms = 5000) {
   }
 }
 
+const ICON = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="red"/></svg>');
 let server;
 let site;
 // The same server under a second hostname, for a second "site".
@@ -33,7 +34,9 @@ let other;
 before(async () => {
   server = http.createServer((req, res) => {
     res.setHeader('content-type', 'text/html');
-    res.end(`<title>Page ${req.url}</title><div style="height:5000px">${req.url}</div>`);
+    // /icon/ pages have a favicon; the rest get Chrome's generic globe.
+    const icon = req.url.startsWith('/icon/') ? `<link rel="icon" href="data:image/svg+xml,${ICON}">` : '';
+    res.end(`<title>Page ${req.url}</title>${icon}<div style="height:5000px">${req.url}</div>`);
   });
   await new Promise((r) => server.listen(0, r));
   site = `http://localhost:${server.address().port}`;
@@ -361,6 +364,89 @@ test('dragging a tile pins it where it lands; the rest stay newest first', async
   await eventually(async () => assert.deepEqual(await pins(), { e: 4 }));
 });
 
+test('tiles: tidy site names, a letter for sites with no icon, and the page title on hover or focus', async (t) => {
+  const b = await launch(t);
+  await b.visit(`${other}/icon/page`);
+  await b.visit(`${site}/plain`);
+  await eventually(async () => assert.deepEqual(await b.dock(), ['127/icon/page*']));
+  await b.sw.evaluate(async () => {
+    const { shelf } = await chrome.storage.local.get('shelf');
+    const item = (url, title) => ({ url, title, domain: new URL(url).hostname, shelvedAt: 0, tabId: null });
+    await chrome.storage.local.set({ shelf: [...shelf, item('https://m.youtube.com/watch', 'Cat video'),
+      item('https://app.slack.com/client/1', 'general'), item('https://app.slack.com/client/2', 'random')] });
+  });
+  const p = await b.panel();
+  // Opening the launcher tab docks /plain.
+  await eventually(async () => assert.deepEqual(
+    (await p.$$eval('.tile .label', (ls) => ls.map((l) => l.textContent))).sort(),
+    ['127.0.0.1', 'localhost', 'slack.com', 'youtube.com']));
+
+  const tileSel = (d) => `[data-domain="${d}"] .tile`;
+  await eventually(async () => assert.equal(await p.textContent(`${tileSel('m.youtube.com')} .letter`), 'Y'));
+  assert.ok(await p.isVisible(`${tileSel('127.0.0.1')} .icon img`), 'a real favicon is shown');
+  assert.equal(await p.$(`${tileSel('127.0.0.1')} .letter`), null);
+  assert.equal(await p.textContent(`${tileSel('app.slack.com')} .letter`), 'S');
+
+  const title = (d) => `${tileSel(d)} .card`;
+  assert.ok(!(await p.isVisible(title('m.youtube.com'))));
+  await p.hover(tileSel('m.youtube.com'));
+  assert.ok(await p.isVisible(title('m.youtube.com')));
+  assert.equal(await p.textContent(title('m.youtube.com')), 'Cat video');
+  await p.mouse.move(0, 0);
+  assert.ok(!(await p.isVisible(title('m.youtube.com'))));
+  await p.hover(tileSel('app.slack.com'));
+  assert.ok(!(await p.isVisible(title('app.slack.com'))), 'a folder has no page title to show');
+  await p.mouse.move(0, 0);
+
+  await p.focus(tileSel('127.0.0.1'));
+  await p.keyboard.press('ArrowLeft');
+  await p.keyboard.press('ArrowRight');
+  assert.equal(await focused(p), '127.0.0.1');
+  assert.ok(await p.isVisible(title('127.0.0.1')), 'shown when selected with the keyboard');
+  assert.equal(await p.textContent(title('127.0.0.1')), 'Page /icon/page');
+  await p.hover(tileSel('m.youtube.com'));
+  assert.ok(await p.isVisible(title('m.youtube.com')));
+  assert.ok(!(await p.isVisible(title('127.0.0.1'))), 'one title at a time: the hovered one');
+
+  await p.click(tileSel('app.slack.com'));
+  assert.equal(await p.textContent('#heading'), 'slack.com');
+});
+
+test('labels can be turned off, leaving icons named by their card', async (t) => {
+  const b = await launch(t);
+  await b.seed(['https://a.test/', 'https://b.test/1', 'https://b.test/2']);
+  const p = await b.panel();
+  const label = '[data-domain="a.test"] .label';
+  const card = (d) => `[data-domain="${d}"] .card`;
+  assert.equal(await p.getAttribute('#show-labels', 'aria-pressed'), 'true');
+  assert.ok(await p.isVisible(label));
+  const height = async () => (await p.$eval('[data-domain="a.test"] .tile', (n) => n.getBoundingClientRect().height));
+  const withLabels = await height();
+
+  await p.click('#show-labels');
+  await eventually(async () => assert.equal(await p.getAttribute('#show-labels', 'aria-pressed'), 'false'));
+  assert.ok(!(await p.isVisible(label)));
+  assert.ok((await height()) < withLabels, 'tiles shrink to their icons');
+  await p.hover('[data-domain="a.test"] .tile');
+  assert.equal(await p.textContent(card('a.test')), 'https://a.test/');
+  assert.ok(await p.isVisible(card('a.test')));
+  await p.hover('[data-domain="b.test"] .tile');
+  assert.ok(await p.isVisible(card('b.test')), 'a folder names its site');
+  assert.equal(await p.textContent(card('b.test')), 'b.test');
+  assert.ok(!(await p.isVisible(card('a.test'))));
+
+  // The setting is shared with the home tab, which has the toggle too.
+  const home = await b.panel('?home', 1280);
+  assert.ok(!(await home.isVisible(label)));
+  assert.ok(await home.isVisible('#show-labels'));
+  await home.click('#show-labels');
+  await eventually(async () => assert.ok(await p.isVisible(label)));
+
+  // It steps aside while Clear dock asks.
+  await p.click('#clear-dock');
+  assert.ok(!(await p.isVisible('#show-labels')));
+});
+
 test('keyboard: arrows reach the footer buttons and come back', async (t) => {
   const b = await launch(t);
   await b.seed(['a', 'b', 'c', 'd', 'e'].map((d) => `https://${d}.test/`));
@@ -371,8 +457,10 @@ test('keyboard: arrows reach the footer buttons and come back', async (t) => {
   await p.focus('[data-domain="e.test"] .tile');
   await press('ArrowDown', 'cache-tabs');
   await press('ArrowRight', 'clear-dock');
+  await press('ArrowRight', 'show-labels');
   await press('ArrowRight', 'keep-open');
   await press('ArrowRight', 'keep-open');
+  await press('ArrowLeft', 'show-labels');
   await press('ArrowLeft', 'clear-dock');
   await press('ArrowUp', 'e.test');
   await press('ArrowDown', 'cache-tabs');

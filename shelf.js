@@ -4,6 +4,13 @@ export function domainOf(url) {
   return new URL(url).hostname.replace(/^www\./, '');
 }
 
+// The name shown for a site. Mobile and web-app subdomains don't say which site it is, so they're dropped; the
+// domain itself still keys the dock and pins.
+export function siteName(domain) {
+  const name = domain.replace(/^(m|mobile|app|web)\./, '');
+  return name.includes('.') ? name : domain;
+}
+
 // Pinned, audible, and already-grouped tabs (the user's own groups, or already shelved) are left where they are;
 // non-web pages can't be meaningfully reopened. Incognito tabs would be written to disk in storage.local.
 export function shelvable(tab) {

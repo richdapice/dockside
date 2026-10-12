@@ -1,4 +1,4 @@
-import { groupByDomain, removeFromShelf, removeDomain, arrange, pinAt, unpin, moveDomain } from './shelf.js';
+import { groupByDomain, removeFromShelf, removeDomain, arrange, pinAt, unpin, moveDomain, siteName } from './shelf.js';
 import { stashedTab } from './stash.js';
 
 const grid = document.getElementById('grid');
@@ -14,6 +14,7 @@ const masthead = document.getElementById('masthead');
 const count = document.getElementById('count');
 const clearDock = document.getElementById('clear-dock');
 const keepOpenButton = document.getElementById('keep-open');
+const showLabelsButton = document.getElementById('show-labels');
 
 // The same page runs in the side panel and as each window's pinned home tab.
 const isPanel = !new URLSearchParams(location.search).has('home');
@@ -22,6 +23,7 @@ if (!isPanel) document.body.classList.add('home');
 let shelf = [];
 let pins = {};
 let keepOpen = false;
+let showLabels = true;
 let dragging = null;
 let openDomain = null;
 // Where focus should land after the next render, as { key, index }. Renders rebuild every node, so focus is
@@ -30,6 +32,54 @@ let restoreFocus = null;
 
 function favicon(url, size) {
   return chrome.runtime.getURL(`/_favicon/?pageUrl=${encodeURIComponent(url)}&size=${size}`);
+}
+
+// Chrome hands back the same generic globe for every site it has no icon for, which leaves those tiles looking
+// alike. Comparing bytes with the globe for a made-up address spots it, and the tile shows a letter instead.
+const globe = faviconBytes('https://dockside.invalid/');
+const hasIcon = new Map();
+
+async function faviconBytes(url) {
+  const res = await fetch(favicon(url, 32));
+  if (!res.ok) throw new Error(`Favicon fetch failed with ${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+function hasRealIcon(url) {
+  if (!hasIcon.has(url)) {
+    hasIcon.set(url, Promise.all([faviconBytes(url), globe])
+      .then(([icon, g]) => icon.length !== g.length || icon.some((byte, i) => byte !== g[i])));
+  }
+  return hasIcon.get(url);
+}
+
+// Dark enough for white text in both themes. A site keeps its color, since it's picked by hashing the name.
+const LETTER_COLORS = ['#e5484d', '#e2620e', '#2f9e5f', '#0f9b8e', '#2b7de9', '#5b5bd6', '#8e4ec6', '#d6409f'];
+
+// FNV-1a: cheap, and spreads similar names (most end in ".com") across the colors.
+function hash(text) {
+  let h = 0x811c9dc5;
+  for (const c of text) h = Math.imul(h ^ c.codePointAt(0), 0x01000193) >>> 0;
+  return h;
+}
+
+function tileIcon(url, site) {
+  // Images are draggable on their own, which would drag the favicon URL instead of the tile. Hidden until it's
+  // known not to be the globe, so the globe never flashes up.
+  const img = el('img', { src: favicon(url, 32), alt: '', draggable: false, className: 'pending' });
+  hasRealIcon(url).then((real) => {
+    if (real) {
+      img.classList.remove('pending');
+      return;
+    }
+    const letter = el('span', { className: 'letter', textContent: [...site][0].toUpperCase() });
+    letter.style.background = LETTER_COLORS[hash(site) % LETTER_COLORS.length];
+    img.replaceWith(letter);
+  }, (e) => {
+    img.classList.remove('pending');
+    console.error(e);
+  });
+  return el('div', { className: 'icon' }, [img]);
 }
 
 function el(tag, props = {}, children = []) {
@@ -109,8 +159,10 @@ function render() {
   count.textContent = shelf.length ? `${shelf.length} ${shelf.length === 1 ? 'tab' : 'tabs'} docked` : '';
   cacheTabs.hidden = groups.length === 0;
   syncClearPrompt();
-  heading.textContent = openDomain ?? '';
+  heading.textContent = openDomain ? siteName(openDomain) : '';
   keepOpenButton.setAttribute('aria-pressed', String(keepOpen));
+  document.body.classList.toggle('no-labels', !showLabels);
+  showLabelsButton.setAttribute('aria-pressed', String(showLabels));
 
   if (openDomain) {
     folder.replaceChildren(...current.items.map(folderRow));
@@ -138,14 +190,20 @@ function leaveFolder() {
 
 function tile(group) {
   const [first] = group.items;
-  // Images are draggable on their own, which would drag the favicon URL instead of the tile.
-  const icon = el('div', { className: 'icon' }, [el('img', { src: favicon(first.url, 32), alt: '', draggable: false })]);
+  const site = siteName(group.domain);
+  const icon = tileIcon(first.url, site);
   if (group.kind === 'folder') icon.append(el('span', { className: 'badge', textContent: group.items.length }));
 
+  // A card over the name shows an app's page title only while hovered or selected, so the grid stays calm otherwise.
+  // A folder's card just names the site, for when labels are off.
+  const name = el('span', { className: 'name' }, [
+    el('span', { className: 'label', textContent: site }),
+    el('span', { className: 'card', textContent: group.kind === 'app' ? first.title : site }),
+  ]);
   const node = el('button', {
     className: `tile ${group.kind}`,
-    title: group.kind === 'app' ? first.title : `${group.items.length} tabs from ${group.domain}`,
-  }, [icon, el('span', { className: 'label', textContent: group.domain })]);
+    ariaLabel: group.kind === 'app' ? `${first.title}, ${site}` : `${group.items.length} tabs from ${site}`,
+  }, [icon, name]);
   node.dataset.key = group.domain;
 
   node.addEventListener('click', () => {
@@ -246,6 +304,10 @@ keepOpenButton.addEventListener('click', () => {
   chrome.storage.local.set({ keepOpen: !keepOpen }).catch(console.error);
 });
 
+showLabelsButton.addEventListener('click', () => {
+  chrome.storage.local.set({ showLabels: !showLabels }).catch(console.error);
+});
+
 cacheTabs.addEventListener('click', () => {
   chrome.runtime.sendMessage({ type: 'cache' }).catch(console.error);
 });
@@ -264,6 +326,8 @@ function syncClearPrompt() {
   const asking = !confirmClear.hidden;
   cacheTabs.classList.toggle('asking', asking);
   clearDock.classList.toggle('asking', asking);
+  // The prompt runs right up to the corner buttons.
+  showLabelsButton.classList.toggle('asking', asking);
   document.getElementById('confirm-text').textContent =
     `Remove all ${shelf.length} ${shelf.length === 1 ? 'tab' : 'tabs'} from the dock and close them?`;
 }
@@ -358,14 +422,16 @@ document.addEventListener('keydown', (e) => {
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local' || !(changes.shelf || changes.pins || changes.keepOpen)) return;
+  if (area !== 'local' || !(changes.shelf || changes.pins || changes.keepOpen || changes.showLabels)) return;
   if (changes.shelf) shelf = changes.shelf.newValue ?? [];
   if (changes.pins) pins = changes.pins.newValue ?? {};
   if (changes.keepOpen) keepOpen = changes.keepOpen.newValue ?? false;
+  if (changes.showLabels) showLabels = changes.showLabels.newValue ?? true;
   render();
 });
 
-({ shelf = [], pins = {}, keepOpen = false } = await chrome.storage.local.get(['shelf', 'pins', 'keepOpen']));
+({ shelf = [], pins = {}, keepOpen = false, showLabels = true } =
+  await chrome.storage.local.get(['shelf', 'pins', 'keepOpen', 'showLabels']));
 render();
 
 if (isPanel) {

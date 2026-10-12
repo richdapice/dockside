@@ -43,7 +43,7 @@ git clone https://github.com/richdapice/dockside.git
 
 **A tab strip that only holds what you're using.** Switch tabs and the one you left docks after half a second. Close a tab yourself and it's gone, not docked.
 
-**Apps and folders.** One tab from a site is an app. Two or more become a folder with a count; open it to see every tab, how long ago you left it, and a × to drop it. **Close all** in a folder, or the × on a tile, drops the whole site and closes its docked tabs.
+**Apps and folders.** One tab from a site is an app. Point at it, or select it with the keyboard, and its page title appears. Two or more tabs become a folder with a count; open it to see every tab, how long ago you left it, and a × to drop it. A site with no icon gets a coloured letter, and names skip prefixes like `www.` and `m.`. The button beside the lock turns names off for a grid of just icons; point at one to see what it is. **Close all** in a folder, or the × on a tile, drops the whole site and closes its docked tabs.
 
 **Tabs that don't reload.** Docked tabs live in a collapsed group at the end of the strip, its chip showing ⚓ and how many are inside. Click an app or a folder row and the live tab comes out. Expand the group and click a tab there, or drag it out, and that works too.
 
