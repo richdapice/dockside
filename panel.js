@@ -162,7 +162,6 @@ function render() {
   masthead.hidden = isPanel || openDomain !== null;
   showCount();
   if (!isPanel) countLoaded().catch(console.error);
-  cacheTabs.hidden = groups.length === 0;
   syncClearPrompt();
   heading.textContent = openDomain ? siteName(openDomain) : '';
   keepOpenButton.setAttribute('aria-pressed', String(keepOpen));

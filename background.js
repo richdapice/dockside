@@ -212,6 +212,7 @@ async function relink() {
     await adoptStashGroup(g.id);
     await retitleStash(g.windowId);
   }
+  await mergeStashGroups();
 
   // Items still linked to their live tab keep it. The rest claim a stash tab with the same URL, or lose their id
   // (an old id could now belong to an unrelated tab) and reopen from the URL.
@@ -230,6 +231,21 @@ async function relink() {
   });
   // Skip the write when nothing moved, to keep writes to a minimum.
   if (next.some((item, i) => item.tabId !== shelf[i].tabId)) await chrome.storage.local.set({ shelf: next });
+}
+
+// A tab docked before Chrome restored the window's old group starts a second one, and relinking then adopts the
+// old one too. The window's groups are folded into its first, so it has one again.
+async function mergeStashGroups() {
+  const ids = await stashGroupIds();
+  const ours = (await chrome.tabGroups.query({})).filter((g) => ids.includes(g.id));
+  for (const g of ours) {
+    const keep = ours.find((o) => o.windowId === g.windowId);
+    if (keep === g) continue;
+    const tabIds = (await chrome.tabs.query({ groupId: g.id })).map((t) => t.id);
+    if (tabIds.length) await chrome.tabs.group({ groupId: keep.id, tabIds });
+    await chrome.tabGroups.update(keep.id, { collapsed: true });
+    await retitleStash(g.windowId);
+  }
 }
 
 // The last-tab shortcut flips back to the tab you were on before, docked or not; pressing it again flips forward.
@@ -289,30 +305,39 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
-// Like OneTab: every tab in a stash group is saved to the dock (storage.local, so it survives a restart) and
-// closed to free memory; its item then reopens from the URL. Works from the groups rather than the dock's links, so
-// tabs whose link was lost, or a stray group left by an older version, are swept up too. Items are written, unlinked,
-// before the tabs close so forget() doesn't drop them.
+// Like OneTab: every tab in a stash group, and every open tab that could dock (each window keeps the tab you're
+// on), is saved to the dock (storage.local, so it survives a restart) and closed to free memory; its item then
+// reopens from the URL. Works from the groups rather than the dock's links, so tabs whose link was lost, or a stray
+// group left by an older version, are swept up too. Items are written, unlinked, before the tabs close so forget()
+// doesn't drop them.
 async function cacheAll() {
   const ids = await stashGroupIds();
   // Untracked groups count only if they look like ours (stash title, grey), so a user's own "Docked" group in
   // another colour is left alone.
   const groups = (await chrome.tabGroups.query({}))
     .filter((g) => ids.includes(g.id) || (isStashTitle(g.title) && g.color === 'grey'));
-  const tabs = (await Promise.all(groups.map((g) => chrome.tabs.query({ groupId: g.id })))).flat()
+  const grouped = (await Promise.all(groups.map((g) => chrome.tabs.query({ groupId: g.id })))).flat()
     // Incognito pages are never written to disk.
     .filter((t) => !t.incognito);
+  const open = (await chrome.tabs.query({ active: false, windowType: 'normal' })).filter(shelvable);
+  const tabs = [...open, ...grouped];
   if (!tabs.length) return;
   const { shelf = [] } = await chrome.storage.local.get('shelf');
   const known = new Set(shelf.map((i) => i.url));
   const now = Date.now();
-  const strays = [];
-  for (const t of tabs) {
-    if (!/^https?:\/\//.test(t.url) || known.has(t.url)) continue;
-    known.add(t.url);
-    strays.push({ url: t.url, title: t.title || t.url, domain: domainOf(t.url), shelvedAt: now, tabId: null });
-  }
-  await chrome.storage.local.set({ shelf: [...shelf.map((i) => ({ ...i, tabId: null })), ...strays] });
+  const newItems = (list) => {
+    const items = [];
+    for (const t of list) {
+      if (!/^https?:\/\//.test(t.url) || known.has(t.url)) continue;
+      known.add(t.url);
+      items.push({ url: t.url, title: t.title || t.url, domain: domainOf(t.url), shelvedAt: now, tabId: null });
+    }
+    return items;
+  };
+  // Open tabs were in use more recently than anything docked, so they go first; stray group tabs go last.
+  const opened = newItems(open);
+  const strays = newItems(grouped);
+  await chrome.storage.local.set({ shelf: [...opened, ...shelf.map((i) => ({ ...i, tabId: null })), ...strays] });
   // One at a time, so a tab the user closed meanwhile doesn't stop the rest from closing.
   await Promise.all(tabs.map((t) => chrome.tabs.remove(t.id).catch(ifGone)));
 }
