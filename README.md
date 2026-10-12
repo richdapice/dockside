@@ -51,7 +51,7 @@ git clone https://github.com/richdapice/dockside.git
 
 **Back to your last tab.** Option+Shift+L flips to the tab you were on before, docked or not. Press it again to flip back.
 
-**Bulk moves.** **Unload tabs** works like OneTab: it docks every tab except the one you're on in each window, then closes them all, the ⚓ group included, to free memory. Tabs that never dock (below) are left alone. The dock survives restarts, and opening an item loads it fresh from its address. **Clear dock** empties the dock and closes its tabs, after asking you to confirm.
+**Bulk moves.** **Dock all tabs** works like OneTab: every tab except the one you're on in each window goes into the dock, and they all close, the ⚓ group included, to free memory. It asks first. Tabs that never dock (below) are left alone. The dock survives restarts, and opening an item loads it fresh from its address. **Clear dock** empties the dock and closes its tabs, after asking you to confirm.
 
 **A panel that gets out of the way.** Opening a tab from the side panel closes the panel. Click the lock in its corner to keep it open instead.
 

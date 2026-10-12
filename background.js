@@ -249,7 +249,7 @@ async function mergeStashGroups() {
 }
 
 // The last-tab shortcut flips back to the tab you were on before, docked or not; pressing it again flips forward.
-// If that tab is gone (closed by hand or by Unload tabs), the newest dock item comes back instead.
+// If that tab is gone (closed by hand or by Dock all tabs), the newest dock item comes back instead.
 async function switchBack(windowId) {
   const { previous = {} } = await chrome.storage.session.get('previous');
   const tab = previous[windowId] === undefined ? null : await chrome.tabs.get(previous[windowId]).catch(ifGone);
@@ -291,7 +291,7 @@ async function recordActivation({ tabId, windowId }) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  // "Unload tabs" in the launcher.
+  // "Dock all tabs" in the launcher.
   if (msg.type === 'cache') {
     shelving = shelving.then(cacheAll).catch(console.error);
     return;
