@@ -295,6 +295,45 @@ test('Unload tabs closes every docked tab, keeps it in the dock, and the dock su
   assert.deepEqual((await again.dock()).sort(), ['/b', '/c', '/d', '/stray']);
 });
 
+test('Unload tabs pulls in open tabs too, even with an empty dock, but not ones that never dock', async (t) => {
+  const b = await launch(t);
+  await b.sw.evaluate(async ({ site }) => {
+    for (const p of ['/x', '/y']) await chrome.tabs.create({ url: site + p, active: false });
+    await chrome.tabs.create({ url: `${site}/pinned`, active: false, pinned: true });
+    const mine = await chrome.tabs.create({ url: `${site}/mine`, active: false });
+    await chrome.tabGroups.update(await chrome.tabs.group({ tabIds: [mine.id] }), { title: 'Mine', color: 'blue' });
+  }, { site });
+  const panel = await b.panel();
+  await b.seed([`${site}/old`]);
+  await panel.click('#cache-tabs');
+  await eventually(async () => assert.deepEqual(await b.dock(), ['/x', '/y', '/old']));
+  const open = await b.tabUrls();
+  assert.ok(!open.includes('/x') && !open.includes('/y'));
+  assert.ok(open.includes('/pinned') && open.includes('/mine'), 'pinned tabs and your own groups stay');
+  assert.ok(!panel.isClosed(), 'the tab you are on stays');
+});
+
+test('one ⚓ group per window, even when docking races a restart', async (t) => {
+  const b = await launch(t);
+  for (const p of ['/a', '/b', '/c']) await b.visit(site + p);
+  await eventually(async () => assert.deepEqual((await b.stashGroups()).map((g) => g.title), ['⚓ 2']));
+
+  // After a restart the group is back before Dockside has relinked it. A tab docked then joins it.
+  await b.sw.evaluate(() => chrome.storage.session.remove('stashGroups'));
+  await b.visit(`${site}/d`);
+  await eventually(async () => assert.deepEqual(await b.stashGroups(), [{ title: '⚓ 3', color: 'grey', collapsed: true, urls: ['/a', '/b', '/c'] }]));
+
+  // Or Chrome brings the old group back only after a new one was started: relinking folds them together.
+  await b.sw.evaluate(async (url) => {
+    const tab = await chrome.tabs.create({ url, active: false });
+    // Unlinked, like every item straight after a restart; relinking claims the tab by URL.
+    const { shelf } = await chrome.storage.local.get('shelf');
+    await chrome.storage.local.set({ shelf: [...shelf, { url, title: url, domain: 'localhost', shelvedAt: 0, tabId: null }] });
+    await chrome.tabGroups.update(await chrome.tabs.group({ tabIds: [tab.id] }), { title: '⚓ 1', color: 'grey' });
+  }, `${site}/x`);
+  await eventually(async () => assert.deepEqual(await b.stashGroups(), [{ title: '⚓ 4', color: 'grey', collapsed: true, urls: ['/a', '/b', '/c', '/x'] }]));
+});
+
 test('the home tab counts docked tabs and how many are still loaded', async (t) => {
   const b = await launch(t);
   const home = b.homePage();
@@ -346,7 +385,8 @@ test('Clear dock asks first, and the prompt follows the dock', async (t) => {
     await eventually(async () => assert.equal(await p.textContent('#confirm-text'), 'Remove all 2 tabs from the dock and close them?'));
     await b.seed([]);
     await eventually(async () => assert.ok(await p.isVisible('#empty')));
-    assert.ok(!(await p.isVisible('#confirm-clear')) && !(await p.isVisible('#clear-dock')) && !(await p.isVisible('#cache-tabs')));
+    assert.ok(!(await p.isVisible('#confirm-clear')) && !(await p.isVisible('#clear-dock')));
+    assert.ok(await p.isVisible('#cache-tabs'), 'Unload tabs can still pull in open tabs');
 
     await b.seed(urls);
     await p.click('#clear-dock');
@@ -470,6 +510,20 @@ test('labels can be turned off, leaving icons named by their card', async (t) =>
   // It steps aside while Clear dock asks.
   await p.click('#clear-dock');
   assert.ok(!(await p.isVisible('#show-labels')));
+});
+
+test('the corner buttons sit inside the footer, even with an empty dock', async (t) => {
+  const b = await launch(t);
+  const p = await b.panel();
+  for (const urls of [[], ['https://a.test/']]) {
+    await b.seed(urls);
+    await eventually(async () => assert.equal(await p.isVisible('#empty'), urls.length === 0));
+    const footer = await p.locator('#actions').boundingBox();
+    for (const id of ['#show-labels', '#keep-open']) {
+      const box = await p.locator(id).boundingBox();
+      assert.ok(box.y > footer.y && box.y + box.height < footer.y + footer.height, `${id} with ${urls.length} docked`);
+    }
+  }
 });
 
 test('keyboard: arrows reach the footer buttons and come back', async (t) => {

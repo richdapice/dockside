@@ -45,8 +45,20 @@ export async function inStash(tab) {
   return tab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE && (await stashGroupIds()).includes(tab.groupId);
 }
 
+// After a browser restart or extension reload the ids are gone until the background relinks, which can be a moment
+// later. A tab docked meanwhile joins the group that's plainly ours (stash title, grey) instead of starting a second.
+async function unclaimedStashGroupIn(windowId) {
+  const ids = await stashGroupIds();
+  const groups = await chrome.tabGroups.query({ windowId });
+  return groups.find((g) => !ids.includes(g.id) && isStashTitle(g.title) && g.color === 'grey') ?? null;
+}
+
 export async function stashTab(tab) {
-  const group = await stashGroupIn(tab.windowId);
+  let group = await stashGroupIn(tab.windowId);
+  if (!group) {
+    group = await unclaimedStashGroupIn(tab.windowId);
+    if (group) await adoptStashGroup(group.id);
+  }
   if (group) {
     await chrome.tabs.group({ groupId: group.id, tabIds: [tab.id] });
     await chrome.tabGroups.update(group.id, { collapsed: true });
