@@ -6,6 +6,8 @@
   --border: #e3e3e6;
   --hover: #ececef;
   --accent: #0a66ff;
+  /* Pins stand apart from the blue folder badges. */
+  --pin: #f76b15;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -16,6 +18,7 @@
     --border: #3a3a3c;
     --hover: #3a3a3c;
     --accent: #4c8dff;
+    --pin: #ff801f;
   }
 }
 * { box-sizing: border-box; }
@@ -121,7 +124,7 @@ body.no-labels .name { top: 6px; }
   /* On the icon's bottom-right corner. */
   position: absolute; top: 42px; left: calc(50% + 14px);
   width: 20px; height: 20px; padding: 0; border-radius: 10px; border: 2px solid var(--bg);
-  background: var(--accent); color: #fff; cursor: pointer; display: grid; place-items: center;
+  background: var(--pin); color: #fff; cursor: pointer; display: grid; place-items: center;
 }
 .tile-pin:hover { filter: brightness(1.15); }
 body.home .tile-pin { top: 62px; left: calc(50% + 22px); }

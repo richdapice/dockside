@@ -64,6 +64,12 @@ chrome.tabs.onRemoved.addListener((tabId, { windowId, isWindowClosing }) => {
   if (!isWindowClosing) ensureHome(windowId);
 });
 chrome.tabs.onDetached.addListener((tabId, { oldWindowId }) => ensureHome(oldWindowId));
+// Putting one back means a closed home tab reopened with ⌘⇧T arrives next to its replacement, and one dragged in
+// from another window joins the home already there. Either way the window ends up with two.
+chrome.tabs.onCreated.addListener((tab) => {
+  if ((tab.url || tab.pendingUrl) === HOME_URL) ensureHome(tab.windowId);
+});
+chrome.tabs.onAttached.addListener((tabId, { newWindowId }) => ensureHome(newWindowId));
 
 async function ensureHomeEverywhere() {
   const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
@@ -73,17 +79,23 @@ async function ensureHomeEverywhere() {
 // Serialized so overlapping events (e.g. startup plus a restored window) can't add two homes to one window.
 let homes = Promise.resolve();
 function ensureHome(windowId) {
-  homes = homes.then(() => addHomeIfMissing(windowId)).catch(console.error);
+  homes = homes.then(() => keepOneHome(windowId)).catch(console.error);
 }
 
-async function addHomeIfMissing(windowId) {
+async function keepOneHome(windowId) {
   // The window may have closed before we got to it.
   const win = await chrome.windows.get(windowId, { populate: true }).catch(ifGone);
   // Extension pages can't load in incognito windows (spanning mode).
   if (!win || win.type !== 'normal' || win.incognito) return;
   // A tab created moments ago may only have pendingUrl set.
-  if (win.tabs.some((t) => (t.url || t.pendingUrl) === HOME_URL)) return;
-  await chrome.tabs.create({ windowId, url: HOME_URL, pinned: true, index: 0, active: false });
+  const [first, ...extra] = win.tabs.filter((t) => (t.url || t.pendingUrl) === HOME_URL);
+  if (!first) {
+    await chrome.tabs.create({ windowId, url: HOME_URL, pinned: true, index: 0, active: false });
+    return;
+  }
+  // The leftmost stays: it's pinned if any is, and a tab reopened with ⌘⇧T returns to its old place there, so the
+  // tab the user just brought back isn't the one that closes.
+  if (extra.length) await chrome.tabs.remove(extra.map((t) => t.id)).catch(ifGone);
 }
 
 // Both stores are read-modify-write and events can arrive back to back, so each gets its own serial queue.
