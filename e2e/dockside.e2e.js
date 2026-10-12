@@ -601,6 +601,21 @@ test('every window keeps a pinned home tab', async (t) => {
 
   await b.sw.evaluate((url) => chrome.windows.create({ url }), `${site}/newwin`);
   await eventually(async () => assert.deepEqual(await homes(), [1, 1]));
+
+  // A second home turning up (a closed one reopened with ⌘⇧T, or one dragged in from another window) is closed,
+  // and the pinned one stays.
+  const all = () => b.sw.evaluate(async () => (await chrome.windows.getAll({ populate: true })).map((w) =>
+    w.tabs.filter((t) => (t.url || t.pendingUrl).endsWith('panel.html?home')).length));
+  const [first, second] = await b.sw.evaluate(async () => (await chrome.windows.getAll()).map((w) => w.id));
+  await b.sw.evaluate(({ windowId, url }) => chrome.tabs.create({ windowId, url }), { windowId: first, url: b.homePage().url() });
+  await eventually(async () => assert.deepEqual(await all(), [1, 1]));
+  assert.deepEqual(await homes(), [1, 1]);
+  await b.sw.evaluate(async ({ from, to }) => {
+    const [home] = await chrome.tabs.query({ windowId: from, pinned: true });
+    await chrome.tabs.move(home.id, { windowId: to, index: -1 });
+  }, { from: second, to: first });
+  await eventually(async () => assert.deepEqual(await all(), [1, 1]));
+  assert.deepEqual(await homes(), [1, 1]);
 });
 
 test('both keyboard shortcuts are registered', async (t) => {
