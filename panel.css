@@ -64,7 +64,31 @@ h1 { font-size: 15px; margin: 0; font-weight: 600; overflow: hidden; text-overfl
   background: var(--accent); color: #fff; font-size: 11px; font-weight: 600;
   display: grid; place-items: center;
 }
+.icon img.pending { visibility: hidden; }
+.letter {
+  width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center;
+  color: #fff; font-size: 16px; font-weight: 600;
+}
+.folder .letter { width: 22px; height: 22px; border-radius: 6px; font-size: 13px; }
+.name { position: relative; align-self: stretch; display: flex; justify-content: center; min-width: 0; }
 .label { font-size: 11px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Laid over the name rather than in the flow, so showing it doesn't push the next row of tiles down. */
+.card {
+  display: none; position: absolute; top: -3px; left: -6px; right: -6px; z-index: 2;
+  padding: 3px 6px; border-radius: 8px; background: var(--tile); border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.15); font-size: 11px; line-height: 1.3; text-align: center;
+  overflow: hidden; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+}
+.tile:is(:hover, :focus-visible) .card { display: -webkit-box; }
+/* The mouse wins over the keyboard selection, so pointing at a tile never shows two cards at once. */
+#grid:has(.tile:hover) .tile:focus-visible:not(:hover) .card { display: none; }
+/* A folder's card only repeats its label. */
+body:not(.no-labels) .folder .card { display: none; }
+/* Labels off: icons only, and the card names a tile while it's pointed at or selected. */
+body.no-labels .label { display: none; }
+body.no-labels .tile { gap: 0; }
+/* Puts the card where it sits with labels on. */
+body.no-labels .name { top: 6px; }
 #folder { padding: 8px 8px; }
 .row {
   display: flex; align-items: center; gap: 10px;
@@ -122,10 +146,14 @@ body.home .tile-pin { top: 62px; left: calc(50% + 22px); }
 #confirm-text { color: var(--text); text-align: center; }
 #actions #confirm-ok { background: #e5484d; color: #fff; }
 #actions #confirm-ok:hover { background: #d13438; }
-#keep-open { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--muted) !important; display: grid; place-items: center; }
-#keep-open[aria-pressed="true"] { color: var(--accent) !important; background: var(--hover); }
+#keep-open, #show-labels { position: absolute; top: 50%; transform: translateY(-50%); color: var(--muted) !important; display: grid; place-items: center; }
+#keep-open { right: 10px; }
+#show-labels { right: 42px; }
+:is(#keep-open, #show-labels)[aria-pressed="true"] { color: var(--accent) !important; background: var(--hover); }
 /* Unlocked: the shackle swings open. */
 #keep-open[aria-pressed="false"] .shackle { transform: translateX(3px) rotate(18deg); transform-origin: 10.5px 7px; }
+/* Labels off: the caption under the tile fades. */
+#show-labels[aria-pressed="false"] .caption { opacity: 0.3; }
 /* The home tab: a whole page, so the dock sits centred under a masthead instead of hugging the top. */
 body.home {
   min-height: 100vh;
@@ -146,7 +174,9 @@ body.home #grid {
 body.home .icon { width: 68px; height: 68px; border-radius: 18px; box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
 body.home .icon img { width: 36px; height: 36px; }
 body.home .folder .icon img { width: 28px; height: 28px; }
-body.home .label { font-size: 12px; }
+body.home .label, body.home .card { font-size: 12px; }
+body.home .letter { width: 36px; height: 36px; border-radius: 9px; font-size: 20px; }
+body.home .folder .letter { width: 28px; height: 28px; border-radius: 7px; font-size: 16px; }
 body.home .tile { padding: 8px 4px; border-radius: 14px; }
 body.home #folder { padding: 12px 16px; }
 body.home .row { padding: 10px 12px; }
@@ -154,3 +184,5 @@ body.home #empty { padding-top: 8px; font-size: 14px; }
 /* Actions follow the dock rather than pinning a bar to the bottom of a mostly empty page. */
 body.home #actions { position: static; border-top: 0; background: none; gap: 8px; }
 body.home #actions button { border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; }
+/* The lock is panel-only, so here the labels toggle joins the row. */
+body.home #show-labels { position: static; transform: none; }

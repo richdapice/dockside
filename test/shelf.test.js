@@ -1,12 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { domainOf, shelvable, addToShelf, removeFromShelf, removeDomain, groupByDomain, arrange, pinAt, unpin, moveDomain } from '../shelf.js';
+import { domainOf, siteName, shelvable, addToShelf, removeFromShelf, removeDomain, groupByDomain, arrange, pinAt, unpin, moveDomain } from '../shelf.js';
 
 const tab = (url, extra = {}) => ({ url, title: url, ...extra });
 
 test('domainOf strips www', () => {
   assert.equal(domainOf('https://www.github.com/a'), 'github.com');
   assert.equal(domainOf('https://docs.github.com/a'), 'docs.github.com');
+});
+
+test('siteName drops mobile and web-app subdomains, but never down to a bare suffix', () => {
+  assert.equal(siteName('m.youtube.com'), 'youtube.com');
+  assert.equal(siteName('app.slack.com'), 'slack.com');
+  assert.equal(siteName('web.whatsapp.com'), 'whatsapp.com');
+  assert.equal(siteName('docs.google.com'), 'docs.google.com');
+  assert.equal(siteName('app.com'), 'app.com');
+  assert.equal(siteName('localhost'), 'localhost');
 });
 
 test('shelvable skips pinned, audible, grouped, incognito, and non-web tabs', () => {
