@@ -252,7 +252,7 @@ test('docked tabs are relinked after a browser restart', async (t) => {
   assert.equal((await b.tabUrls()).filter((u) => u === '/a').length, 1);
 });
 
-test('Cache tabs closes every docked tab, keeps it in the dock, and the dock survives a restart', async (t) => {
+test('Unload tabs closes every docked tab, keeps it in the dock, and the dock survives a restart', async (t) => {
   const b = await launch(t);
   for (const p of ['/a', '/b', '/c', '/d']) await b.visit(site + p);
   await eventually(async () => assert.equal((await b.dock()).length, 3));
@@ -284,7 +284,7 @@ test('Cache tabs closes every docked tab, keeps it in the dock, and the dock sur
   assert.ok(open.includes('/work') && open.includes('/myred'));
   assert.ok(await panel.isVisible('#cache-tabs'));
 
-  // Opening a cached item loads it fresh.
+  // Opening an unloaded item loads it fresh.
   await panel.click('[data-domain="localhost"] .tile');
   await panel.click(`.row[title="${site}/a"]`);
   await eventually(async () => assert.ok((await b.tabUrls()).includes('/a')));
@@ -293,6 +293,31 @@ test('Cache tabs closes every docked tab, keeps it in the dock, and the dock sur
   await b.ctx.close();
   const again = await launch(t, { profile: b.profile });
   assert.deepEqual((await again.dock()).sort(), ['/b', '/c', '/d', '/stray']);
+});
+
+test('the home tab counts docked tabs and how many are still loaded', async (t) => {
+  const b = await launch(t);
+  const home = b.homePage();
+  const count = () => home.textContent('#count');
+  for (const p of ['/a', '/b', '/c']) await b.visit(site + p);
+  await eventually(async () => assert.equal(await count(), '2 tabs docked · 2 loaded'));
+
+  const panel = await b.panel();
+  await eventually(async () => assert.equal(await count(), '3 tabs docked · 3 loaded'));
+  await panel.click('#cache-tabs');
+  await eventually(async () => assert.equal(await count(), '3 tabs docked · 0 loaded'));
+
+  // A window closing leaves its docked tabs in the dock but closes them, without the dock changing.
+  const win = await b.sw.evaluate((url) => chrome.windows.create({ url }), `${site}/w1`);
+  await b.sw.evaluate(({ windowId, url }) => chrome.tabs.create({ windowId, url }), { windowId: win.id, url: `${site}/w2` });
+  await eventually(async () => assert.equal(await count(), '4 tabs docked · 1 loaded'));
+  await b.sw.evaluate((id) => chrome.windows.remove(id), win.id);
+  await eventually(async () => assert.equal(await count(), '4 tabs docked · 0 loaded'));
+  assert.equal((await b.dock()).length, 4);
+
+  // Reloading counts afresh.
+  await home.reload();
+  await eventually(async () => assert.equal(await count(), '4 tabs docked · 0 loaded'));
 });
 
 test('Clear dock asks first, and the prompt follows the dock', async (t) => {

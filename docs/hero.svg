@@ -100,7 +100,7 @@
     <!-- side panel -->
     <rect x="624" y="28" width="304" height="262" rx="10" fill="#010409" stroke="#30363d"/>
     <line x1="624" y1="248" x2="928" y2="248" stroke="#30363d"/>
-    <text x="728" y="273" font-size="12" fill="#58a6ff" text-anchor="middle">Cache tabs</text>
+    <text x="728" y="273" font-size="12" fill="#58a6ff" text-anchor="middle">Unload tabs</text>
     <text x="830" y="273" font-size="12" fill="#58a6ff" text-anchor="middle">Clear dock</text>
 
     <!-- github.com: app, then folder -->
