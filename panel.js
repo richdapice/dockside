@@ -1,5 +1,5 @@
 import { groupByDomain, removeFromShelf, removeDomain, arrange, pinAt, unpin, moveDomain, siteName } from './shelf.js';
-import { stashedTab } from './stash.js';
+import { stashedTab, stashGroupIds } from './stash.js';
 
 const grid = document.getElementById('grid');
 const folder = document.getElementById('folder');
@@ -26,6 +26,10 @@ let keepOpen = false;
 let showLabels = true;
 let dragging = null;
 let openDomain = null;
+// Docked tabs still open in a ⚓ group, for the home tab's count. The rest were unloaded or their window closed.
+// Null until first counted, so the count never shows a made-up number.
+let loaded = null;
+let loadedRun = 0;
 // Where focus should land after the next render, as { key, index }. Renders rebuild every node, so focus is
 // carried over by key (domain for tiles, URL for rows), falling back to the same position.
 let restoreFocus = null;
@@ -156,7 +160,8 @@ function render() {
   actions.hidden = openDomain !== null;
   clearDock.hidden = groups.length === 0;
   masthead.hidden = isPanel || openDomain !== null;
-  count.textContent = shelf.length ? `${shelf.length} ${shelf.length === 1 ? 'tab' : 'tabs'} docked` : '';
+  showCount();
+  if (!isPanel) countLoaded().catch(console.error);
   cacheTabs.hidden = groups.length === 0;
   syncClearPrompt();
   heading.textContent = openDomain ? siteName(openDomain) : '';
@@ -174,6 +179,22 @@ function render() {
     const items = navItems();
     (items.find((n) => n.dataset.key === prior.key) ?? items[Math.min(prior.index, items.length - 1)])?.focus();
   }
+}
+
+function showCount() {
+  const docked = `${shelf.length} ${shelf.length === 1 ? 'tab' : 'tabs'} docked`;
+  count.textContent = !shelf.length ? '' : loaded === null ? docked : `${docked} · ${loaded} loaded`;
+}
+
+// Counts the stash groups' tabs, so it stays right when the group changes without the dock changing (a window
+// closing). Overlapping counts can finish out of order; only the newest is shown.
+async function countLoaded() {
+  const run = ++loadedRun;
+  const tabs = await Promise.all((await stashGroupIds()).map((groupId) => chrome.tabs.query({ groupId })));
+  const open = new Set(tabs.flat().map((t) => t.id));
+  if (run !== loadedRun) return;
+  loaded = shelf.filter((i) => open.has(i.tabId)).length;
+  showCount();
 }
 
 function openFolder(domain) {
@@ -422,6 +443,8 @@ document.addEventListener('keydown', (e) => {
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
+  // The background re-adopts its groups after an extension reload or restart.
+  if (area === 'session' && changes.stashGroups && !isPanel) countLoaded().catch(console.error);
   if (area !== 'local' || !(changes.shelf || changes.pins || changes.keepOpen || changes.showLabels)) return;
   if (changes.shelf) shelf = changes.shelf.newValue ?? [];
   if (changes.pins) pins = changes.pins.newValue ?? {};
@@ -433,6 +456,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
 ({ shelf = [], pins = {}, keepOpen = false, showLabels = true } =
   await chrome.storage.local.get(['shelf', 'pins', 'keepOpen', 'showLabels']));
 render();
+
+if (!isPanel) chrome.windows.onRemoved.addListener(() => countLoaded().catch(console.error));
 
 if (isPanel) {
   // A freshly opened panel has keyboard focus; select the first tile so the arrow keys and Enter work at once.

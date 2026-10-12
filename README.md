@@ -51,11 +51,11 @@ git clone https://github.com/richdapice/dockside.git
 
 **Back to your last tab.** Option+Shift+L flips to the tab you were on before, docked or not. Press it again to flip back.
 
-**Bulk moves.** **Cache tabs** works like OneTab: it saves every tab in the ⚓ group to the dock and closes them, freeing memory. The dock survives restarts, and opening an item loads it fresh from its address. **Clear dock** empties the dock and closes its tabs, after asking you to confirm.
+**Bulk moves.** **Unload tabs** works like OneTab: it closes every tab in the ⚓ group to free memory, keeping them in the dock. The dock survives restarts, and opening an item loads it fresh from its address. **Clear dock** empties the dock and closes its tabs, after asking you to confirm.
 
 **A panel that gets out of the way.** Opening a tab from the side panel closes the panel. Click the lock in its corner to keep it open instead.
 
-**A window that stays open.** Each window keeps a pinned Dockside tab showing the launcher, so closing your last regular tab never closes the window.
+**A window that stays open.** Each window keeps a pinned Dockside tab showing the launcher, so closing your last regular tab never closes the window. Its heading counts your docked tabs and how many are still loaded in the ⚓ group.
 
 ## Keys
 
