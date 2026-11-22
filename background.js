@@ -1,6 +1,6 @@
 import { shelvable, addToShelf, domainOf } from './shelf.js';
 import {
-  inStash, stashTab, stashedTab, closeStashed, stashGroupIds, stashGroupIn, adoptStashGroup, retitleStash,
+  inStash, stashTab, stashedTab, closeStashed, closeTabs, stashGroupIds, stashGroupIn, adoptStashGroup, retitleStash,
   isStashTitle, ifGone,
 } from './stash.js';
 
@@ -338,8 +338,7 @@ async function cacheAll() {
   const opened = newItems(open);
   const strays = newItems(grouped);
   await chrome.storage.local.set({ shelf: [...opened, ...shelf.map((i) => ({ ...i, tabId: null })), ...strays] });
-  // One at a time, so a tab the user closed meanwhile doesn't stop the rest from closing.
-  await Promise.all(tabs.map((t) => chrome.tabs.remove(t.id).catch(ifGone)));
+  await closeTabs(tabs);
 }
 
 async function removeUrls(urls, closeTabs) {

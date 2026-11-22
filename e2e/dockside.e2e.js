@@ -196,8 +196,10 @@ test('the group chip counts its tabs, and old or look-alike groups are handled',
   const mine = { title: '⚓ 9', color: 'red', collapsed: false, urls: ['/mine'] };
   assert.deepEqual((await b.groups()).find((g) => g.color === 'red'), mine);
 
-  // Removing everything (the launcher's Clear dock) closes our group only.
+  // Removing everything (the launcher's Clear dock) closes our group only. Opening the launcher docks /e half a
+  // second later; clearing before that would leave /e to dock into a new group afterwards.
   const panel = await b.panel();
+  await eventually(async () => assert.equal((await b.stashGroups())[0].title, '⚓ 5'));
   await panel.click('#clear-dock');
   await panel.click('#confirm-ok');
   await eventually(async () => assert.deepEqual(await b.dock(), []));
@@ -325,6 +327,61 @@ test('Dock all tabs pulls in open tabs too, even with an empty dock, but not one
   assert.ok(!open.includes('/x') && !open.includes('/y'));
   assert.ok(open.includes('/pinned') && open.includes('/mine'), 'pinned tabs and your own groups stay');
   assert.ok(!panel.isClosed(), 'the tab you are on stays');
+});
+
+test('emptying the ⚓ group ungroups its last tab before closing it, so Chrome keeps no saved copy', async (t) => {
+  const b = await launch(t);
+  // Records Dockside's own ungroup and close calls in order. Tab events can't tell them apart: Chrome reports a
+  // grouped tab leaving its group as it closes, too.
+  await b.sw.evaluate(() => {
+    self.events = [];
+    const { ungroup, remove } = chrome.tabs;
+    chrome.tabs.ungroup = async (ids) => {
+      for (const id of [ids].flat()) self.events.push(['ungroup', id]);
+      return ungroup.call(chrome.tabs, ids);
+    };
+    chrome.tabs.remove = async (ids) => {
+      const done = await remove.call(chrome.tabs, ids);
+      for (const id of [ids].flat()) self.events.push(['remove', id]);
+      return done;
+    };
+  });
+  const grouped = () => b.sw.evaluate(async () => (await chrome.tabs.query({})).filter((t) => t.groupId !== -1).map((t) => t.id));
+  // The group's tabs must all close, the last one ungrouped first: Chrome deletes a group emptied that way instead
+  // of keeping it as a closed saved group.
+  const emptiedByUngroup = async (ids) => {
+    const events = await eventually(async () => {
+      const events = await b.sw.evaluate(() => self.events);
+      for (const id of ids) assert.ok(events.some(([e, i]) => e === 'remove' && i === id), `tab ${id} closed`);
+      return events;
+    });
+    const ungrouped = events.filter(([e, i]) => e === 'ungroup' && ids.includes(i)).map(([, i]) => i);
+    assert.equal(ungrouped.length, 1, 'only the last tab is ungrouped');
+    const at = (e, id) => events.findIndex(([x, i]) => x === e && i === id);
+    for (const id of ids.filter((i) => i !== ungrouped[0])) assert.ok(at('remove', id) < at('ungroup', ungrouped[0]));
+    assert.ok(at('ungroup', ungrouped[0]) < at('remove', ungrouped[0]));
+  };
+
+  for (const p of ['/a', '/b', '/c']) await b.visit(site + p);
+  const panel = await b.panel();
+  await eventually(async () => assert.equal((await grouped()).length, 3));
+  let ids = await grouped();
+  await panel.click('#cache-tabs');
+  await panel.click('#confirm-ok');
+  await emptiedByUngroup(ids);
+  assert.deepEqual(await b.stashGroups(), []);
+
+  // Clear dock, the same way.
+  for (const p of ['/d', '/e', '/f']) await b.visit(site + p);
+  // Opening the home tab docks /f, so wait for that before clearing.
+  const home = await b.panel('?home', 1280);
+  await eventually(async () => assert.equal((await grouped()).length, 3));
+  ids = await grouped();
+  await b.sw.evaluate(() => { self.events = []; });
+  await home.click('#clear-dock');
+  await home.click('#confirm-ok');
+  await emptiedByUngroup(ids);
+  assert.deepEqual(await b.stashGroups(), []);
 });
 
 test('one ⚓ group per window, even when docking races a restart', async (t) => {
