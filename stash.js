@@ -78,7 +78,25 @@ export async function stashedTab(item) {
 }
 
 export async function closeStashed(items) {
-  const tabs = await Promise.all(items.map(stashedTab));
-  const ids = tabs.filter(Boolean).map((t) => t.id);
-  if (ids.length) await chrome.tabs.remove(ids);
+  const tabs = (await Promise.all(items.map(stashedTab))).filter(Boolean);
+  if (tabs.length) await closeTabs(tabs);
+}
+
+// Chrome keeps a group whose last tab closes as a closed saved group in its Tab groups menu, so every group emptied
+// that way piled up there. A group that loses its last tab to ungrouping is deleted instead, so the last tab of
+// each group being emptied is ungrouped before it closes. The others close first, so only one tab leaves the
+// collapsed group on screen.
+export async function closeTabs(tabs) {
+  const last = [];
+  for (const groupId of new Set(tabs.map((t) => t.groupId))) {
+    if (groupId === chrome.tabGroups.TAB_GROUP_ID_NONE) continue;
+    const closing = tabs.filter((t) => t.groupId === groupId);
+    if (closing.length === (await chrome.tabs.query({ groupId })).length) last.push(closing.at(-1));
+  }
+  // One at a time, so a tab the user closed meanwhile doesn't stop the rest from closing.
+  await Promise.all(tabs.filter((t) => !last.includes(t)).map((t) => chrome.tabs.remove(t.id).catch(ifGone)));
+  for (const t of last) {
+    await chrome.tabs.ungroup(t.id).catch(ifGone);
+    await chrome.tabs.remove(t.id).catch(ifGone);
+  }
 }
