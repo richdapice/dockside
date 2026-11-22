@@ -16,6 +16,10 @@
     "last-tab": {
       "suggested_key": { "default": "Alt+Shift+L" },
       "description": "Switch to the tab you used last"
+    },
+    "close-tab": {
+      "suggested_key": { "default": "Alt+W" },
+      "description": "Close this tab and switch to the tab you used last"
     }
   }
 }

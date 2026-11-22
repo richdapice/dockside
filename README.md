@@ -49,7 +49,7 @@ git clone https://github.com/richdapice/dockside.git
 
 **Your arrangement.** Tiles are sorted newest first, by when you last left a tab from that site, so the tab you just left is up front. Drag a tile and it's pinned where you drop it, marked with a pin; everything else flows around it. Click the pin, or press P, to unpin.
 
-**Back to your last tab.** Option+Shift+L flips to the tab you were on before, docked or not. Press it again to flip back.
+**Back to your last tab.** Option+Shift+L flips to the tab you were on before, docked or not. Press it again to flip back. Option+W closes the tab you're on and takes you back to that one, instead of whichever tab sits next to it.
 
 **Bulk moves.** **Dock all tabs** sends every tab except the one you're on in each window into the dock, and they all close, the ⚓ group included, to free memory. It asks first. Tabs that never dock (below) are left alone. The dock survives restarts, and opening an item loads it fresh from its address. **Clear dock** empties the dock and closes its tabs, after asking you to confirm.
 
@@ -63,6 +63,7 @@ git clone https://github.com/richdapice/dockside.git
 |---|---|---|
 | Anywhere in Chrome | Option+Shift+S | Open or close the panel |
 | Anywhere in Chrome | Option+Shift+L | Switch to the tab you used last |
+| Anywhere in Chrome | Option+W | Close this tab and switch to the tab you used last |
 | Grid | ← → ↑ ↓ | Move between tiles |
 | Grid | Enter | Open an app, or open a folder |
 | Grid | P | Pin the selected tile where it is, or unpin it |
@@ -102,7 +103,7 @@ HEADED=1 npm run e2e                         # the same, with the browser visibl
 ```
 
 The end-to-end tests load the extension and drive real tabs and groups, with the launcher open as a tab, since
-automation can't open the side panel. The two keyboard shortcuts need real key presses, so check those by hand.
+automation can't open the side panel. They fire the close-tab shortcut's command directly; the key presses themselves, and the panel shortcut, need checking by hand.
 
 ## License
 
