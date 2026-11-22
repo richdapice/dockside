@@ -41,6 +41,13 @@ export function groupByDomain(shelf) {
   return [...groups].map(([domain, items]) => ({ domain, items, kind: items.length === 1 ? 'app' : 'folder' }));
 }
 
+// Pinned sites keep a tile with none of their tabs docked, as a link to the site.
+export function withPinnedSites(groups, pins) {
+  const docked = new Set(groups.map((g) => g.domain));
+  const sites = Object.keys(pins).filter((d) => !docked.has(d)).map((domain) => ({ domain, items: [], kind: 'site' }));
+  return [...groups, ...sites];
+}
+
 // Pinned domains ({ domain: index }) sit at their index; the rest fill the gaps in the order given (newest first).
 // A pin past the end lands at the end. Pins for domains not in the dock take no space, and apply again if the
 // domain comes back.

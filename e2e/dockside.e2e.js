@@ -291,7 +291,8 @@ test('Dock all tabs closes every docked tab, keeps it in the dock, and the dock 
   await panel.click('[data-domain="localhost"] .tile');
   await panel.click(`.row[title="${site}/a"]`);
   await eventually(async () => assert.ok((await b.tabUrls()).includes('/a')));
-  assert.ok(!(await b.dock()).includes('/a'));
+  // The tab opens first and the item leaves the dock a moment later.
+  await eventually(async () => assert.ok(!(await b.dock()).includes('/a')));
 
   await b.ctx.close();
   const again = await launch(t, { profile: b.profile });
@@ -602,6 +603,59 @@ test('the corner buttons sit inside the footer, even with an empty dock', async 
   await p.setViewportSize({ width: 320, height: 500 });
   const clear = await p.locator('#clear-dock').boundingBox();
   assert.ok(clear.x + clear.width < (await p.locator('#show-labels').boundingBox()).x);
+});
+
+test('a pinned site keeps its tile once its tabs are gone, and opens its home page', async (t) => {
+  const b = await launch(t);
+  // Visited, so Chrome has 127.0.0.1's icon.
+  await b.visit(`${other}/icon/page`);
+  await b.visit(`${site}/deep/page?x=1`);
+  await eventually(async () => assert.deepEqual(await b.dock(), ['127/icon/page*']));
+  const p = await b.panel();
+  // Opening the launcher docks /deep/page.
+  await eventually(async () => assert.deepEqual(await tiles(p), ['localhost', '127.0.0.1']));
+  const stored = () => b.sw.evaluate(async () => chrome.storage.local.get(['pins', 'pinnedSites']));
+
+  for (const domain of ['localhost', '127.0.0.1']) {
+    await p.focus(`[data-domain="${domain}"] .tile`);
+    await p.keyboard.press('p');
+  }
+  await eventually(async () => assert.deepEqual(await stored(), {
+    pins: { localhost: 0, '127.0.0.1': 1 },
+    pinnedSites: {
+      localhost: { home: `${site}/`, page: `${site}/deep/page?x=1` },
+      '127.0.0.1': { home: `${other}/`, page: `${other}/icon/page` },
+    },
+  }));
+
+  // Removing their tabs leaves the pinned tiles, as links to the sites.
+  await p.focus('[data-domain="localhost"] .tile');
+  await p.keyboard.press('Delete');
+  await p.hover('[data-domain="127.0.0.1"] .tile');
+  await p.click('[data-domain="127.0.0.1"] .tile-remove');
+  await eventually(async () => assert.deepEqual(await b.dock(), []));
+  await eventually(async () => assert.deepEqual(await tiles(p), ['localhost📌', '127.0.0.1📌']));
+  assert.ok(await p.isVisible('[data-domain="localhost"] .tile.site'));
+  assert.ok(!(await p.isVisible('#empty')) && !(await p.isVisible('#clear-dock')));
+  await eventually(async () => assert.ok(await p.isVisible('[data-domain="127.0.0.1"] .icon img'), 'the site keeps its icon'));
+  assert.equal(await p.getAttribute('[data-domain="localhost"] .tile-remove', 'title'), 'Unpin');
+
+  // Clicking one opens the site's home page, and the tile stays.
+  await p.click('[data-domain="localhost"] .tile');
+  await eventually(async () => assert.ok((await b.tabUrls()).includes('/')));
+  assert.deepEqual(await b.dock(), []);
+  // Opening the launcher again would dock the home page it just opened, so close that first.
+  await b.sw.evaluate(async (url) => chrome.tabs.remove((await chrome.tabs.query({})).find((t) => t.url === url).id), `${site}/`);
+  const again = await b.panel();
+  assert.deepEqual(await tiles(again), ['localhost📌', '127.0.0.1📌']);
+
+  // × on an empty pinned site, or Delete, unpins it.
+  await again.hover('[data-domain="localhost"] .tile');
+  await again.click('[data-domain="localhost"] .tile-remove');
+  await again.focus('[data-domain="127.0.0.1"] .tile');
+  await again.keyboard.press('Delete');
+  await eventually(async () => assert.deepEqual(await stored(), { pins: {}, pinnedSites: {} }));
+  assert.ok(await again.isVisible('#empty'));
 });
 
 test('keyboard: arrows reach the footer buttons and come back', async (t) => {
