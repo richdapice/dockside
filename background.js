@@ -33,6 +33,7 @@ chrome.runtime.onConnect.addListener((port) => {
 // The shortcut opens the panel, or closes it if it's already open.
 chrome.commands.onCommand.addListener((command, tab) => {
   if (command === 'last-tab' && tab) activations = activations.then(() => switchBack(tab.windowId)).catch(console.error);
+  if (command === 'close-tab' && tab) activations = activations.then(() => closeAndSwitchBack(tab)).catch(console.error);
   if (command !== 'toggle-panel' || !tab) return;
   const { windowId } = tab;
   if (panels.has(windowId)) chrome.sidePanel.close({ windowId }).catch(console.error);
@@ -272,6 +273,13 @@ async function switchBack(windowId) {
   });
   shelving = done.catch(console.error);
   await done;
+}
+
+// The close-tab shortcut closes the tab you're on and goes back to the tab you used last, instead of the neighbour
+// Chrome would pick. Switching first means the neighbour never becomes active, so it isn't docked for being left.
+async function closeAndSwitchBack(tab) {
+  await switchBack(tab.windowId);
+  await chrome.tabs.remove(tab.id).catch(ifGone);
 }
 
 async function recordActivation({ tabId, windowId }) {

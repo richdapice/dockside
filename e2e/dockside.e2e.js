@@ -1,7 +1,7 @@
 // End-to-end tests: load the unpacked extension into Playwright's Chromium and drive real tabs, groups and the
 // launcher page. The side panel itself can't be opened by automation, so the launcher is tested as a tab
 // (panel.html behaves like the side panel; panel.html?home is the home tab).
-// The keyboard shortcuts need real key presses, so they're checked by hand.
+// Shortcuts are fired with chrome.commands.onCommand.dispatch; the key presses themselves are checked by hand.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -750,8 +750,39 @@ test('every window keeps a pinned home tab', async (t) => {
   assert.deepEqual(await homes(), [1, 1]);
 });
 
-test('both keyboard shortcuts are registered', async (t) => {
+test('the keyboard shortcuts are registered', async (t) => {
   const b = await launch(t);
-  const commands = await b.sw.evaluate(async () => (await chrome.commands.getAll()).map((c) => c.name));
-  assert.ok(commands.includes('toggle-panel') && commands.includes('last-tab'));
+  const commands = await b.sw.evaluate(async () => Object.fromEntries((await chrome.commands.getAll()).map((c) => [c.name, c.shortcut])));
+  for (const name of ['toggle-panel', 'last-tab', 'close-tab']) assert.ok(commands[name], `${name} has a shortcut`);
+});
+
+test('the close-tab shortcut closes the tab and goes back to the one used last, not its neighbour', async (t) => {
+  const b = await launch(t);
+  for (const p of ['/a', '/b']) await b.visit(site + p);
+  const c = await b.visit(`${site}/c`);
+  // Right of C, where Chrome would go on its own. It's never been active, so it isn't docked.
+  await b.sw.evaluate(async (url) => {
+    const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+    await chrome.tabs.create({ url, active: false, index: active.index + 1 });
+  }, `${site}/n`);
+  await eventually(async () => assert.deepEqual(await b.dock(), ['/b*', '/a*']));
+  const shortcut = () => b.sw.evaluate(async () => {
+    const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+    chrome.commands.onCommand.dispatch('close-tab', active);
+  });
+  const activeUrl = async () => short((await b.sw.evaluate(async () => (await chrome.tabs.query({ active: true, currentWindow: true }))[0].url)));
+
+  await shortcut();
+  await eventually(async () => assert.ok(c.isClosed()));
+  await eventually(async () => assert.equal(await activeUrl(), '/b'));
+  // Past the half-second wait before docking: had the neighbour been switched to, it would have docked.
+  await sleep(800);
+  assert.deepEqual(await b.dock(), ['/a*'], 'B came out of the dock and /n never went in');
+
+  // C is gone now, so the newest dock item comes back instead.
+  await shortcut();
+  await eventually(async () => assert.equal(await activeUrl(), '/a'));
+  await sleep(800);
+  assert.deepEqual(await b.dock(), []);
+  assert.ok(!(await b.tabUrls()).includes('/b'));
 });
