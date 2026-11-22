@@ -85,8 +85,8 @@ h1 { font-size: 15px; margin: 0; font-weight: 600; overflow: hidden; text-overfl
 .tile:is(:hover, :focus-visible) .card { display: -webkit-box; }
 /* The mouse wins over the keyboard selection, so pointing at a tile never shows two cards at once. */
 #grid:has(.tile:hover) .tile:focus-visible:not(:hover) .card { display: none; }
-/* A folder's card only repeats its label. */
-body:not(.no-labels) .folder .card { display: none; }
+/* A folder's or pinned site's card only repeats its label. */
+body:not(.no-labels) :is(.folder, .site) .card { display: none; }
 /* Labels off: icons only, and the card names a tile while it's pointed at or selected. */
 body.no-labels .label { display: none; }
 body.no-labels .tile { gap: 0; }

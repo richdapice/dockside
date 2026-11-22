@@ -47,7 +47,7 @@ git clone https://github.com/richdapice/dockside.git
 
 **Tabs that don't reload.** Docked tabs live in a collapsed group at the end of the strip, its chip showing ⚓ and how many are inside. Click an app or a folder row and the live tab comes out. Expand the group and click a tab there, or drag it out, and that works too.
 
-**Your arrangement.** Tiles are sorted newest first, by when you last left a tab from that site, so the tab you just left is up front. Drag a tile and it's pinned where you drop it, marked with a pin; everything else flows around it. Click the pin, or press P, to unpin.
+**Your arrangement.** Tiles are sorted newest first, by when you last left a tab from that site, so the tab you just left is up front. Drag a tile and it's pinned where you drop it, marked with a pin; everything else flows around it. Click the pin, or press P, to unpin. A pinned site keeps its tile, with the site's icon, even once all its tabs are gone; click it then to open the site's home page. Unpin it, or use its ×, to let it go.
 
 **Back to your last tab.** Option+Shift+L flips to the tab you were on before, docked or not. Press it again to flip back. Option+W closes the tab you're on and takes you back to that one, instead of whichever tab sits next to it.
 

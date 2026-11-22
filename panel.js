@@ -1,4 +1,6 @@
-import { groupByDomain, removeFromShelf, removeDomain, arrange, pinAt, unpin, moveDomain, siteName } from './shelf.js';
+import {
+  groupByDomain, withPinnedSites, removeFromShelf, removeDomain, arrange, pinAt, unpin, moveDomain, siteName,
+} from './shelf.js';
 import { stashedTab, stashGroupIds } from './stash.js';
 
 const grid = document.getElementById('grid');
@@ -22,6 +24,9 @@ if (!isPanel) document.body.classList.add('home');
 
 let shelf = [];
 let pins = {};
+// What a pinned site's tile needs once none of its tabs are docked, kept from when it was pinned:
+// { domain: { home, page } }, the home page it opens and a page Chrome has the site's icon for.
+let pinnedSites = {};
 let keepOpen = false;
 let showLabels = true;
 let dragging = null;
@@ -67,12 +72,17 @@ function hash(text) {
   return h;
 }
 
-function tileIcon(url, site) {
+// Shows the first of urls Chrome has a real icon for.
+function tileIcon(urls, site) {
   // Images are draggable on their own, which would drag the favicon URL instead of the tile. Hidden until it's
   // known not to be the globe, so the globe never flashes up.
-  const img = el('img', { src: favicon(url, 32), alt: '', draggable: false, className: 'pending' });
-  hasRealIcon(url).then((real) => {
-    if (real) {
+  const img = el('img', { src: favicon(urls[0], 32), alt: '', draggable: false, className: 'pending' });
+  (async () => {
+    for (const url of urls) if (await hasRealIcon(url)) return url;
+    return null;
+  })().then((url) => {
+    if (url) {
+      img.src = favicon(url, 32);
       img.classList.remove('pending');
       return;
     }
@@ -148,17 +158,17 @@ function render() {
   const prior = restoreFocus ?? (focused && { key: focused.dataset.key, index: navItems().indexOf(focused) });
   restoreFocus = null;
 
-  const groups = arrange(groupByDomain(shelf), pins);
+  const groups = arrange(withPinnedSites(groupByDomain(shelf), pins), pins);
   const current = groups.find((g) => g.domain === openDomain);
-  // A folder that dropped back to one item turns back into an app, so leave the folder view.
-  if (!current || current.kind === 'app') openDomain = null;
+  // A folder that dropped back to one item turns back into an app (or a pinned site with none), so leave it.
+  if (!current || current.kind !== 'folder') openDomain = null;
 
   empty.hidden = groups.length > 0;
   grid.hidden = openDomain !== null;
   folder.hidden = openDomain === null;
   header.hidden = openDomain === null;
   actions.hidden = openDomain !== null;
-  clearDock.hidden = groups.length === 0;
+  clearDock.hidden = shelf.length === 0;
   masthead.hidden = isPanel || openDomain !== null;
   showCount();
   if (!isPanel) countLoaded().catch(console.error);
@@ -208,10 +218,19 @@ function leaveFolder() {
   render();
 }
 
+function rootOf(domain) {
+  const item = shelf.find((i) => i.domain === domain);
+  return pinnedSites[domain]?.home ?? (item ? `${new URL(item.url).origin}/` : `https://${domain}/`);
+}
+
 function tile(group) {
   const [first] = group.items;
   const site = siteName(group.domain);
-  const icon = tileIcon(first.url, site);
+  const root = rootOf(group.domain);
+  // A pinned site shows its home page's icon. Chrome only has icons for pages it has shown, so failing that it falls
+  // back to a docked tab's, then to the page it was pinned from.
+  const pinnedIcons = [root, first?.url, pinnedSites[group.domain]?.page].filter(Boolean);
+  const icon = tileIcon(group.domain in pins ? pinnedIcons : [first.url], site);
   if (group.kind === 'folder') icon.append(el('span', { className: 'badge', textContent: group.items.length }));
 
   // A card over the name shows an app's page title only while hovered or selected, so the grid stays calm otherwise.
@@ -222,31 +241,39 @@ function tile(group) {
   ]);
   const node = el('button', {
     className: `tile ${group.kind}`,
-    ariaLabel: group.kind === 'app' ? `${first.title}, ${site}` : `${group.items.length} tabs from ${site}`,
+    ariaLabel: {
+      app: `${first?.title}, ${site}`, folder: `${group.items.length} tabs from ${site}`, site: `Open ${site}`,
+    }[group.kind],
   }, [icon, name]);
   node.dataset.key = group.domain;
 
   node.addEventListener('click', () => {
     if (group.kind === 'app') {
       openItem(first).catch(console.error);
+    } else if (group.kind === 'site') {
+      openItem({ url: root, tabId: null }).catch(console.error);
     } else {
       openFolder(group.domain);
     }
   });
 
   // A sibling of the tile button rather than a child, since buttons can't nest.
+  // A pinned site's tile outlasts its tabs, so its × then unpins it.
   const remove = el('button', {
     className: 'remove tile-remove',
     textContent: '×',
-    title: group.kind === 'app' ? 'Remove from dock' : `Remove all ${group.items.length} tabs`,
+    title: { app: 'Remove from dock', folder: `Remove all ${group.items.length} tabs`, site: 'Unpin' }[group.kind],
   });
-  remove.addEventListener('click', () => removeItems(removeDomain(shelf, group.domain)).catch(console.error));
+  remove.addEventListener('click', () => {
+    if (group.kind === 'site') unpinSite(group.domain);
+    else removeItems(removeDomain(shelf, group.domain)).catch(console.error);
+  });
   const wrap = el('div', { className: 'tile-wrap', draggable: true }, [node, remove]);
   wrap.dataset.domain = group.domain;
   if (group.domain in pins) {
     const pin = el('button', { className: 'tile-pin', title: 'Pinned here. Click to unpin.', ariaLabel: `Unpin ${group.domain}` });
     pin.innerHTML = PIN_SVG;
-    pin.addEventListener('click', () => savePins(unpin(pins, group.domain)));
+    pin.addEventListener('click', () => unpinSite(group.domain));
     wrap.append(pin);
   }
   wrap.addEventListener('dragstart', (e) => {
@@ -270,7 +297,7 @@ function tile(group) {
     if (!dragging || dragging === group.domain) return;
     const shown = [...grid.querySelectorAll('.tile-wrap')].map((w) => w.dataset.domain);
     const index = moveDomain(shown, dragging, group.domain, dropsAfter(e, wrap)).indexOf(dragging);
-    savePins(pinAt(pins, dragging, index));
+    pinSite(dragging, index);
   });
   return wrap;
 }
@@ -278,8 +305,18 @@ function tile(group) {
 const PIN_SVG = '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" '
   + 'd="M10.2 1.3l4.5 4.5-1.4.6-2.6 2.6.4 3.4-1.3 1.3-2.9-2.9-3.6 3.6-.9-.9 3.6-3.6-2.9-2.9 1.3-1.3 3.4.4 2.6-2.6z"/></svg>';
 
-function savePins(next) {
-  chrome.storage.local.set({ pins: next }).catch(console.error);
+function pinSite(domain, index) {
+  // Pinning a site that has tabs records it from one of them; an empty pinned site being dragged keeps what it has.
+  const item = shelf.find((i) => i.domain === domain);
+  const sites = item
+    ? { ...pinnedSites, [domain]: { home: `${new URL(item.url).origin}/`, page: item.url } }
+    : pinnedSites;
+  chrome.storage.local.set({ pins: pinAt(pins, domain, index), pinnedSites: sites }).catch(console.error);
+}
+
+function unpinSite(domain) {
+  const { [domain]: _, ...sites } = pinnedSites;
+  chrome.storage.local.set({ pins: unpin(pins, domain), pinnedSites: sites }).catch(console.error);
 }
 
 function dropsAfter(e, wrap) {
@@ -429,13 +466,18 @@ document.addEventListener('keydown', (e) => {
   if (!openDomain && e.key === 'p') {
     e.preventDefault();
     restoreFocus = { key, index: at };
-    savePins(key in pins ? unpin(pins, key) : pinAt(pins, key, at));
+    if (key in pins) unpinSite(key);
+    else pinSite(key, at);
     return;
   }
   // Mac keyboards' delete key sends Backspace; Delete is fn+delete there and the Delete key elsewhere.
   if (e.key === 'Delete' || e.key === 'Backspace') {
     e.preventDefault();
     restoreFocus = { key: null, index: at };
+    if (!openDomain && items[at].classList.contains('site')) {
+      unpinSite(key);
+      return;
+    }
     const next = openDomain ? removeFromShelf(shelf, key) : removeDomain(shelf, key);
     removeItems(next).catch(console.error);
   } else if (openDomain && (e.key === 'Enter' || e.key === ' ')) {
@@ -449,16 +491,18 @@ document.addEventListener('keydown', (e) => {
 chrome.storage.onChanged.addListener((changes, area) => {
   // The background re-adopts its groups after an extension reload or restart.
   if (area === 'session' && changes.stashGroups && !isPanel) countLoaded().catch(console.error);
-  if (area !== 'local' || !(changes.shelf || changes.pins || changes.keepOpen || changes.showLabels)) return;
+  const watched = ['shelf', 'pins', 'pinnedSites', 'keepOpen', 'showLabels'];
+  if (area !== 'local' || !watched.some((key) => changes[key])) return;
   if (changes.shelf) shelf = changes.shelf.newValue ?? [];
   if (changes.pins) pins = changes.pins.newValue ?? {};
+  if (changes.pinnedSites) pinnedSites = changes.pinnedSites.newValue ?? {};
   if (changes.keepOpen) keepOpen = changes.keepOpen.newValue ?? false;
   if (changes.showLabels) showLabels = changes.showLabels.newValue ?? true;
   render();
 });
 
-({ shelf = [], pins = {}, keepOpen = false, showLabels = true } =
-  await chrome.storage.local.get(['shelf', 'pins', 'keepOpen', 'showLabels']));
+({ shelf = [], pins = {}, pinnedSites = {}, keepOpen = false, showLabels = true } =
+  await chrome.storage.local.get(['shelf', 'pins', 'pinnedSites', 'keepOpen', 'showLabels']));
 render();
 
 if (!isPanel) chrome.windows.onRemoved.addListener(() => countLoaded().catch(console.error));

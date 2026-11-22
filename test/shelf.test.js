@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { domainOf, siteName, shelvable, addToShelf, removeFromShelf, removeDomain, groupByDomain, arrange, pinAt, unpin, moveDomain } from '../shelf.js';
+import { domainOf, siteName, shelvable, addToShelf, removeFromShelf, removeDomain, groupByDomain, withPinnedSites, arrange, pinAt, unpin, moveDomain } from '../shelf.js';
 
 const tab = (url, extra = {}) => ({ url, title: url, ...extra });
 
@@ -78,6 +78,15 @@ test('arrange puts a pin past the end at the end, and ignores pins for absent do
   assert.equal(names(arrange(groupsOf('n1', 'p'), { p: 5 })), 'n1 p');
   assert.equal(names(arrange(groupsOf('n1', 'n2'), { gone: 0 })), 'n1 n2');
   assert.equal(names(arrange(groupsOf('p1', 'p2'), { p2: 3, p1: 7 })), 'p2 p1');
+});
+
+test('withPinnedSites adds an empty site tile for each pinned domain with nothing docked', () => {
+  const groups = groupsOf('a', 'b');
+  const out = withPinnedSites(groups, { b: 0, gone: 3 });
+  assert.equal(names(out), 'a b gone');
+  assert.deepEqual(out.at(-1), { domain: 'gone', items: [], kind: 'site' });
+  assert.equal(out[1], groups[1], 'a pinned domain with tabs keeps its group');
+  assert.equal(names(arrange(out, { b: 0, gone: 1 })), 'b gone a');
 });
 
 test('pinAt moves clashing pins along', () => {
